@@ -45,8 +45,11 @@ fileHeader = {'X1','Y1','Z1','M(1,1,1)','M(1,2,1)','M(1,3,1)','M(2,1,1)',...
 %from the subject's folder for processing.
 if(iscell(filesToProcess))
     for procFile=1:size(filesToProcess,2)
+        
         %Isolate Filename for saving purposes
         [pathstr,fileName,ext] = fileparts(filesToProcess{procFile});
+        
+        disp(['Beginning Conversion of ' fileName ' kinematic data.'])
         
         %Load File
         birdFID = fopen(filesToProcess{procFile});
@@ -146,11 +149,8 @@ if(iscell(filesToProcess))
                     %Deactive the mark flag after, as only the first data
                     %point after a mark is relevant to the mark.
                     if(markFlag)
-                        disp('Mark Flag Triggered')
-                        newConvLine(end-6:end)
                         newConvLine(end-3) = markCount;
                         markFlag = 0;
-                        newConvLine(end-6:end)
                     end
                     
                     %Note the trial number if the trial flag is present.
@@ -170,17 +170,18 @@ if(iscell(filesToProcess))
             end
             %Increment the current data line to test for loop continuance.
             curDataLine=birdData(dataLine,:);
-        end
+        end      
         
         %File Conversion Complete.  Assemble the converted data together
         %with the header information and save to file.
+        startSave = tic;
         cellOutput = cell(2,numSensors*12+4);
         cellOutput{1,1} = descriptiveString;
         cellOutput(2,:) = fileHeader;
         cellOutput = vertcat(cellOutput,num2cell(convDataSet));
         
         cell2csv([outputFolder filesep fileName '.gkf'],cellOutput);
-        
+                
         %Clear CellOutput with every file printed to keep memory for
         %getting blasted huge.
         clear cellOutput
