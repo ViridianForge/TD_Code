@@ -77,43 +77,34 @@ if(iscell(filesToProcess))
         dataLine = 3;
         curDataLine=birdData(dataLine,:);
         while isempty((strfind(curDataLine{1},'QUIT')))
-            curDataLine{1}
-            strfind(curDataLine{1},'QUIT')
-            curDataLine=birdData(dataLine,:);
             newConvLine = zeros(1,numSensors*12+4);
             if(ischar(curDataLine{1}))
                 %If Mark Notation Observed, increment the mark count and
                 %activate the Mark flag
                 if(strfind(curDataLine{1},'MARK'))
-                    disp 'Found Mark'
                     markCount = markCount + 1;
                     markFlag = 1;
                     dataLine = dataLine+2;
                 %If Paused Observed, Note Pause as line of 0s plus a pause
                 %marker.
                 elseif(strfind(curDataLine{1},'PAUSE'))
-                    disp 'Found Pause'
                     pauseCount = pauseCount + 1;
                     newConvLine(end-3)=pauseCount;
                     convDataSet = vertcat(convDataSet,newConvLine);
                     dataLine = dataLine+2;
                 %If trial beginning is observed, note trial number.    
                 elseif(strfind(curDataLine{1},'BEGIN'))
-                    disp 'Found Trial Begin'
                     trialCount = trialCount + 1;
                     trialFlag = 1;
                     dataLine = dataLine+2;
                 %If trial ending is observed, note trial number.    
                 elseif(strfind(curDataLine{1},'END'))
-                    disp 'Found Trial End'
                     trialFlag = 0;
                     dataLine = dataLine+2;
                 elseif(strcmp(curDataLine{1},''))
                     dataLine = dataLine+1;
                 %Otherwise, line of data.  Get to chunking!
                 else
-                    disp 'Found Data Line'
-                    curDataLine
                     %Grab the Three Lines of Data for the data point.
                     %Using the franEraDataLineGather to prevent any data
                     %gaps.
@@ -123,9 +114,9 @@ if(iscell(filesToProcess))
                     dataLine=newInd;
                     
                     %Flop the data lines so that they're in row formatting.
-                    firstDataLine = firstDataLine{1}'
-                    secondDataLine = secondDataLine{1}'
-                    thirdDataLine = thirdDataLine{1}'
+                    firstDataLine = firstDataLine{1}';
+                    secondDataLine = secondDataLine{1}';
+                    thirdDataLine = thirdDataLine{1}';
                     
                     %populate the new data line
                     newConvLine(1:numSensors*12) = ...
@@ -155,13 +146,16 @@ if(iscell(filesToProcess))
                     %Deactive the mark flag after, as only the first data
                     %point after a mark is relevant to the mark.
                     if(markFlag)
-                        newConvLine(end-4) = markCount;
+                        disp('Mark Flag Triggered')
+                        newConvLine(end-6:end)
+                        newConvLine(end-3) = markCount;
                         markFlag = 0;
+                        newConvLine(end-6:end)
                     end
                     
                     %Note the trial number if the trial flag is present.
                     if(trialFlag)
-                        newConvLine(end-2) = trialCount;
+                        newConvLine(end-1) = trialCount;
                     end
                     
                     %Record the timestamp
@@ -174,6 +168,8 @@ if(iscell(filesToProcess))
                     dataLine = dataLine+1;
                 end
             end
+            %Increment the current data line to test for loop continuance.
+            curDataLine=birdData(dataLine,:);
         end
         
         %File Conversion Complete.  Assemble the converted data together
@@ -183,6 +179,10 @@ if(iscell(filesToProcess))
         cellOutput(2,:) = fileHeader;
         cellOutput = vertcat(cellOutput,num2cell(convDataSet));
         
-        cell2csv([outputFolder fileName '.gkf'],cellOutput);
+        cell2csv([outputFolder filesep fileName '.gkf'],cellOutput);
+        
+        %Clear CellOutput with every file printed to keep memory for
+        %getting blasted huge.
+        clear cellOutput
     end
 end
