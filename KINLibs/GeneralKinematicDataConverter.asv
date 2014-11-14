@@ -1,0 +1,119 @@
+function [ posData, rotMatData, markData, metaData ] = ...
+    GeneralKinematicDataConverter( kinDataFile, metaDataCombs, trialMode )
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%GeneralKinematicDataConverter.m - A generalized Kinematic Data Converter
+%   This function exists to allow for the access of Kinematic data from a
+%   generalized kinematic data format.
+%
+%   This format necessitates that kinematic data collected be presented in
+%   a consistent matrix formatting, with columns of data dedicated entirely
+%   to a singular measurement type.
+%
+%   A full description of the generalized format utilized by this script
+%   can be found in Appendix E of the full program manual for the
+%   Santamaria-Rachwani project, which should be included in the Docs
+%   folders of the Santamaria-Rachwani code database.
+%
+%   For reference, the columns will contain data as follows:
+%   For each sensor:
+%   1-3 -- Sensor Position Data
+%   4-6 -- Sensor Rotational Matrix Data from Row 1
+%   7-9 -- Sensor Rotational Matrix Data from Row 2
+%   10-12 -- Sensor Rotational matrix Data from Row 3
+%   (last column - 3) -- Mark Notations
+%   (last column - 2) -- Pause Notations
+%   (last column - 1) -- Trial Notations
+%   last column -- Timestamps
+%
+%Author -- Wayne Manselle
+%Date -- November 2014
+%
+%Inputs:
+%   kinDataFile -- the Kinematic Data File to be read.
+%
+%   metaDataCombs -- This data structure represents function handles and
+%   columns of data that are operated on, and which notated marks to apply
+%   the function, in order to acquire meta-data about the dataset in
+%   question.
+%
+%   trialMode -- Boolean flag.  If 1, return data separated by trials.  If
+%   0, return data as a lump container
+%
+%Outputs:
+%   posData -- The Kinematic Position Data for the dataset
+%   rotMatData -- The Rotational Matrix Data for the dataset
+%   markData -- Mark Data for the dataset
+%   metaData -- Meta Data for the dataset
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Read in the kinematic data, starting from the first non-header row
+kinematicData = csvread(kinDataFile,0,2);
+
+%With access to the kinematic data file in question, we can now begin
+%discovering how many sensors there are, and assembling the arrays
+%dictating how to pull data from the file.
+numSensors = (size(kinDataFile,2)-4)/12;
+
+posDataCols = zeros(1,numSensors*3);
+
+for index=1:3:size(posDataCols,2)
+    posDataCols(index:index+2) = (12*(index-1)+1):(12*(index-1)+3);
+end
+
+%Check to see if whether we're processing a whole set, or trial mode only
+numCells = 1;
+if(trialMode == 1)
+    numCells = max(kinematicData(:,end-1));
+end
+
+posData = cell(1,numCells);
+rotMatData = cell(1,numCells);
+
+%Assemble the Position Data and Rotation Data Matrices
+for trial=1:numCells
+      
+    %If we're in examine the whole dataset mode, then trial data is
+    %simply equal to the whole dataset.  If we're grabbing trial by
+    %trial data, then we use logical indexing to specify which portions
+    %of the trial to grab.
+    if(numCells==1)
+        trialData=kinematicData;
+    else
+        trialData=kinematicData((kinematicData(:,end-1)==trial),:);
+    end
+    
+    %Grab the position data from the trial data    
+    posData{trial} = num2cell((trialData(:,end-1)==trial),posDataCols);
+    
+    %Assemble the rotational matrix data
+    %As we're de-linearizing the 3x3 rotational matrices, and assembling an
+    %array of 3D arrays for future processing, this has to be done on a row
+    %by row basis.
+    rotMatTrial = cell(size(trialData,1),(size(trialData,2)-4)/12);
+    for sensor=1:size(rotMatTrial,1)
+        for row=1:size(trialData,1)
+            posTrial
+            rotMatTrial{row,sensor} = ...
+                num2cell(vertcat(trialData(row,(3+(sensor-1*11)):(5+(sensor-1*11))),...
+                    trialData(row,(6+(sensor-1*11)):(8+(sensor-1*11))),...
+                    trialData(row,(9+(sensor-1*11)):11*sensor)));
+        end
+    end
+    rotMatData{trial} = rotMatTrial;
+end
+
+%Assemble the Mark Data Matrix
+markData = zeros(max(kinematicData(:,end-4)),numSensors);
+for mInd = 1:size(markData,1)
+    markData(mInd,:) = kinematicData(kinematicData(:,end-4)==mInd,1:end-5);
+end
+
+%Assemble any remaining meta data
+%Metadata comes from our function systems
+metaData = cell{1};
+
+for fcnInd = 1:size(metaDataCombs,1)
+    
+end
+
+end

@@ -1,0 +1,60 @@
+OpenSHAPACodeDictionary
+
+This document describes the behavorial categorization codes that are 
+currently being used in the OpenSHAPA categorization of the reach videos 
+collected during Victor Santamaria and Jennifer Rachwani's longitudinal 
+study.
+
+Change Log 
+-- 10/10/2012 -- Wayne A Manselle -- Initial Document Creation
+-- 05/28/2014 -- Wayne A Manselle -- Updated Document to include codes used
+                                     in TD/CP study
+
+ADULT STUDY CODES
+
+BDS -- Bimanual Dominant Successful
+BNDS -- Bimanual Non-Dominant Successful
+
+BDU -- Bimanual Dominant Unsuccessful
+BNDU -- Bimanual Non-Dominant Unsuccessful
+
+UDS -- Unimanual Dominant Successful
+UNDS -- Unimanual Non-Dominant Successful
+
+UDU -- Unimanual Dominant Unsuccessful
+UNDU -- Unimanual Non-Dominant Unsuccessful
+
+GBS -- Grasp Bimanual Successful
+GUS -- Grasp Unimanual Successul
+
+GBU -- Grasp Bimanual Unsuccessful
+GUU -- Grasp Unimanual Unsuccesful
+
+TD STUDY CODES
+
+UU -- Unimanual Unsuccessful Reach
+US -- Unimanual Successful Reach
+UUG -- Unimanual Unsuccessful Grasp
+USG -- Unimanual Successful Grasp
+
+BDS -- Bimanual Dominant Hand Successful Reach
+BDSG -- Bimanual Dominant Hand Successful Grasp
+BDU -- Bimanual Dominant Hand Unsuccessful Reach
+BDUG -- Bimanual Dominant Hand Unsuccessful Grasp
+
+PR -- Pre-Reaching
+QS -- Quiet Sitting
+
+CP STUDY CODES
+
+CBDSR -- Coupled Bimanaul Dominant Successful Reach
+UDSR -- Unimanual Dominant Successful Reach
+BDSR -- Bimanual Dominant 
+
+STROKE GRANT PREP CODES
+
+US -- Unimanual Successful Reach
+RUS -- Right Unimanual Successful Reach
+LUS -- Left Unimanual Successful Reach
+MUS -- Middle Unimanual Successful Reach
+QS -- Quiet Sitting

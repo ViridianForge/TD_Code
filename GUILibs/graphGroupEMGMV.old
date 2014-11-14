@@ -1,0 +1,119 @@
+function graphGroupEMGMV(cleanEMG, emgHeader,binSize,preEventLength,...
+    activationTimes,pkAmps,gTitle,collectionDir)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%GRAPHPMKINMV Generates plots of PM-Centric Kinematics
+%   This breakout function generates MATLAB graphs to visually compare
+%   kinematic data from the given subject against EMG data in a double-y
+%   format.
+%
+%   This version of GraphPMKin produces similar graphs to the adult paper's
+%   version of GraphPMKin, but uses the pkAmps variable to indicate whether
+%   to scale the graphs to the peak amplitude of the passed EMG channels
+%   individually, or to a passed in set of peak amplitudes.
+%
+%   For our purposes, a passed in set of peak amplitudes are calculated
+%   from the greatest peak activity of a muscular channel across all levels
+%   of support given to a subject during a data collection.
+%
+%Author: Wayne Manselle -- January 2014
+%
+%Changes:  Code adapted to function with data input from TDCP processing
+%          system.  -- May 2014
+%
+%INPUTS: cleanEMG -- Non-normalized EMG data used in normalization
+%        emgHeader -- The EMG Channel Names
+%        pmOnset -- Onset of Prime Mover Activation 
+%        primeMover -- Muscle Channel number of Prime Mover
+%        activationTimes -- The times the muscle was activated
+%        pkAmps -- The Peak Amplitude of each channel across levels, or a
+%        single 0 to indicate to use a channel's individual peak.
+%        gTitle -- The Current Reach being processed as a graph title
+%        collectionDir -- Ultimate output file location for reach
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%The minus 1 here is to account for the header in the Normalized EMG data.
+timeLine = linspace(0,(size(cleanEMG,1)),(size(cleanEMG,1)));
+timeLine = timeLine - preEventLength;
+
+numMuscs = size(cleanEMG,2);
+
+%Determine the limits for the non-arm channels for scaling purposes.
+if(size(pkAmps,2)==1)
+    chanLims = ceil(max(cleanEMG));
+    fileMod = 'selfPeak';
+else
+    chanLims = ceil(pkAmps);
+    fileMod = 'totalPeak';
+end
+
+%Subaxis approach -- Looking the best
+subax = figure('units','normalized','outerposition',[0 0 1 1],'Visible','off');
+for chan=1:numMuscs
+    subaxis(numMuscs,1,chan,'SpacingVert',0.005,'MR',0.25,'MT',0.05,'ML',0.25)
+    plot(timeLine,cleanEMG(:,chan),'b')
+    hold on
+    line([0 0],[-2 chanLims(chan)+2],'LineStyle','--','Color',[0 0 0])
+    %Plot All Muscle Burst Times
+    chanActivations=activationTimes{chan};
+    for activation=1:size(chanActivations,1)
+        curAct=chanActivations(activation,:);
+        %There is an activation present for this muscle.  Plot it.
+        if(~isempty(curAct))
+            %Convert Activation into ms
+            curOnset = ((curAct(1)-1)*binSize-preEventLength);
+            curOffset = ((curAct(2))*binSize-preEventLength);
+            %Musc Onset Line
+            line([curOnset curOnset],[-2 chanLims(chan)+2],'LineStyle','--','Color',[0.75 0.2 0])
+            hold on
+            %MuscOffset Onset Line
+            line([curOffset curOffset],[-2 chanLims(chan)+2],'LineStyle','--','Color',[0.75 0.2 0])
+            hold on
+            %Connecting Line
+            line([curOnset curOffset],[chanLims(chan)*.9,chanLims(chan)*.9],'LineStyle','--','Color',[0.75 0.2 0])
+            hold on
+        end
+    end
+    hold on
+    box off
+    %Draw some lines to replace the box cleanly
+    %These very tiny additions to the limits are to ensure that all lines
+    %are plotted cleanly.
+    line([timeLine(end) timeLine(end)],[-2 chanLims(chan)+2.001],'LineStyle','-','Color',[0 0 0])
+    hold on
+    line([timeLine(1) timeLine(end)],[chanLims(chan)+2 chanLims(chan)+2],'LineStyle','-','Color',[0 0 0])
+    hold on
+    ylabel({emgHeader{chan},'(mV)'})
+    %Test with kinematics
+    %Last channel, build the X axis, otherwise don't
+    if(chan==numMuscs)
+        set(gca,...
+        'YTickLabel',num2str(chanLims(chan)),...
+        'YTick',chanLims(chan),...
+        'YLim',[-2 chanLims(chan)+2.001],...
+        'XLim',[min(timeLine) max(timeLine)])
+        xlabel('Time (ms)')
+    else
+        set(gca,'XTickLabel',[],'XTick',[],...
+        'YTickLabel',num2str(chanLims(chan)),...
+        'YTick',chanLims(chan),...
+        'XLim',[min(timeLine) max(timeLine)],...
+        'YLim',[-2 chanLims(chan)+2.001])
+    end
+    %First Channel, set the Title
+    if(chan==1)
+        title(gTitle,'interpreter','none')
+    end
+end
+
+set(findall(subax,'type','text'),'fontSize',8,'fontWeight','bold')
+
+%However, we do check for the Prime Mover Graph folder's existence, as
+%Victor and Jennifer will not have created this yet.
+if(~exist([collectionDir '\' fileMod],'dir'))
+    mkdir([collectionDir '\' fileMod])
+end
+
+%Save graphs as "high quality" png files.
+%Can I switch this to the emf file?
+saveas(subax, [collectionDir '\' fileMod '\' gTitle '.png']);
+end
