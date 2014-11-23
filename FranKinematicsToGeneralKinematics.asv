@@ -74,57 +74,45 @@ if(iscell(filesToProcess))
         
         %Scan line by line, starting at the third line to avoid the
         %descriptive text and header
-        dataLine = 3;
-        curDataLine=birdData(dataLine,:);
-        while isempty((strfind(curDataLine{1},'QUIT')))
-            curDataLine{1}
-            strfind(curDataLine{1},'QUIT')
+        for dataLine=3:length(birdData)
+            curDataLine=birdData(dataLine,:);
             newConvLine = zeros(1,numSensors*12+4);
-            if(ischar(curDataLine{1}))
+            if(iscell(curDataLine) && ischar(curDataLine{1}))
                 %If Mark Notation Observed, increment the mark count and
                 %activate the Mark flag
                 if(strfind(curDataLine{1},'MARK'))
-                    disp 'Found Mark'
                     markCount = markCount + 1;
                     markFlag = 1;
                     dataLine = dataLine+2;
                 %If Paused Observed, Note Pause as line of 0s plus a pause
                 %marker.
                 elseif(strfind(curDataLine{1},'PAUSE'))
-                    disp 'Found Pause'
                     pauseCount = pauseCount + 1;
                     newConvLine(end-3)=pauseCount;
                     convDataSet = vertcat(convDataSet,newConvLine);
                     dataLine = dataLine+2;
                 %If trial beginning is observed, note trial number.    
                 elseif(strfind(curDataLine{1},'BEGIN'))
-                    disp 'Found Trial Begin'
                     trialCount = trialCount + 1;
                     trialFlag = 1;
                     dataLine = dataLine+2;
                 %If trial ending is observed, note trial number.    
                 elseif(strfind(curDataLine{1},'END'))
-                    disp 'Found Trial End'
                     trialFlag = 0;
                     dataLine = dataLine+2;
-                elseif(strcmp(curDataLine{1},''))
-                    dataLine = dataLine+1;
                 %Otherwise, line of data.  Get to chunking!
                 else
-                    disp 'Found Data Line'
-                    curDataLine
+  
                     %Grab the Three Lines of Data for the data point.
                     %Using the franEraDataLineGather to prevent any data
                     %gaps.
-                    [firstDataLine,secondDataLine,thirdDataLine,newInd] = ...
+                    [firstDataLine,secondDataLine,thirdDataLine,dataLine] = ...
                         franEraDataLineGatherer(birdData,dataLine);
                     
-                    dataLine=newInd;
-                    
                     %Flop the data lines so that they're in row formatting.
-                    firstDataLine = firstDataLine{1}'
-                    secondDataLine = secondDataLine{1}'
-                    thirdDataLine = thirdDataLine{1}'
+                    firstDataLine = firstDataLine{1}';
+                    secondDataLine = secondDataLine{1}';
+                    thirdDataLine = thirdDataLine{1}';
                     
                     %populate the new data line
                     newConvLine(1:numSensors*12) = ...
@@ -173,14 +161,12 @@ if(iscell(filesToProcess))
                     dataLine = dataLine+1;
                 end
             end
-            %Increme
-            curDataLine=birdData(dataLine,:);
         end
         
         %File Conversion Complete.  Assemble the converted data together
         %with the header information and save to file.
         cellOutput = cell(2,numSensors*12+4);
-        cellOutput{1,1} = descriptiveString;
+        cellOutput(1,1) = descriptiveString;
         cellOutput(2,:) = fileHeader;
         cellOutput = vertcat(cellOutput,num2cell(convDataSet));
         

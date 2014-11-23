@@ -1,4 +1,4 @@
-function [ posData, rotMatData, markData] = ...
+function [ posData, rotMatData, markData, metaData] = ...
     GeneralKinematicDataConverter( kinDataFile, trialMode )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %GeneralKinematicDataConverter.m - A generalized Kinematic Data Converter
@@ -38,21 +38,28 @@ function [ posData, rotMatData, markData] = ...
 %   posData -- The Kinematic Position Data for the dataset
 %   rotMatData -- The Rotational Matrix Data for the dataset
 %   markData -- Mark Data for the dataset
-%   metaData -- Meta Data for the dataset
+%   metaData -- Array of Meta Data for the Dataset
+%     For each sensor -- Min and Max of X,Y and Z position
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %Read in the kinematic data, starting from the first non-header row
-kinematicData = csvread(kinDataFile,0,2);
+kinematicData = csvread(kinDataFile,3,0);
 
 %With access to the kinematic data file in question, we can now begin
 %discovering how many sensors there are, and assembling the arrays
 %dictating how to pull data from the file.
-numSensors = (size(kinDataFile,2)-4)/12;
+numSensors = (size(kinematicData,2)-4)/12;
 
-posDataCols = zeros(1,numSensors*3);
+%Prepare storage for the metadata, a 2x3 matrix for each of the sensors in 
+%the collection's sensor array.
+metaData = zeros(2,3,numSensors);
 
-for index=1:3:size(posDataCols,2)
-    posDataCols(index:index+2) = (12*(index-1)+1):(12*(index-1)+3);
+posDataCols = [];
+
+for index=1:numSensors
+    posDataCols = horzcat(posDataCols,1+((index-1)*12):3+((index-1)*12));
+    metaData(1,:,index) = min(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
+    metaData(2,:,index) = max(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
 end
 
 %Check to see if whether we're processing a whole set, or trial mode only
@@ -78,27 +85,27 @@ for trial=1:numCells
     end
     
     %Grab the position data from the trial data    
-    posData{trial} = num2cell((trialData(:,end-1)==trial),posDataCols);
+    posData{trial} = num2cell(trialData(:,posDataCols));
     
     %Assemble the rotational matrix data
     %As we're de-linearizing the 3x3 rotational matrices, and assembling an
     %array of 3D arrays for future processing, this has to be done on a row
     %by row basis.
-    rotMatTrial = cell(size(trialData,1),(size(trialData,2)-4)/12);
-    for sensor=1:size(rotMatTrial,1)
+    rotMatTrial = cell(size(trialData,1),((size(trialData,2)-4)/12));
+    
+    for sensor=1:size(rotMatTrial,2)
         for row=1:size(trialData,1)
-            posTrial
             rotMatTrial{row,sensor} = ...
-                num2cell(vertcat(trialData(row,(3+(sensor-1*11)):(5+(sensor-1*11))),...
-                    trialData(row,(6+(sensor-1*11)):(8+(sensor-1*11))),...
-                    trialData(row,(9+(sensor-1*11)):11*sensor)));
+                num2cell(vertcat(trialData(row,(3+((sensor-1)*11)):(5+((sensor-1)*11))),...
+                    trialData(row,(6+((sensor-1)*11)):(8+((sensor-1)*11))),...
+                    trialData(row,(9+((sensor-1)*11)):(11*sensor))));
         end
     end
     rotMatData{trial} = rotMatTrial;
 end
 
 %Assemble the Mark Data Matrix
-markData = zeros(max(kinematicData(:,end-4)),numSensors);
+markData = zeros(max(kinematicData(:,end-3)),numSensors*12);
 for mInd = 1:size(markData,1)
-    markData(mInd,:) = kinematicData(kinematicData(:,end-4)==mInd,1:end-5);
+    markData(mInd,:) = kinematicData(kinematicData(:,end-3)==mInd,1:end-4);
 end
