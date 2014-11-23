@@ -1,5 +1,5 @@
 function [ posData, rotMatData, markData, metaData] = ...
-    GeneralKinematicDataConverter( kinDataFile, trialMode )
+    GeneralKinematicDataConverter( kinDataFile, trialMode, posConvFact )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %GeneralKinematicDataConverter.m - A generalized Kinematic Data Converter
 %   This function exists to allow for the access of Kinematic data from a
@@ -34,6 +34,11 @@ function [ posData, rotMatData, markData, metaData] = ...
 %   trialMode -- Boolean flag.  If 1, return data separated by trials.  If
 %   0, return data as a lump container
 %
+%   posConvFact -- Conversion factor to apply to all positional data.  Used
+%   when needing to convert from one unit type to another.  Example:  If
+%   data was collected in inches and was wanted in centimeters, you'd pass
+%   the function 2.54.
+%
 %Outputs:
 %   posData -- The Kinematic Position Data for the dataset
 %   rotMatData -- The Rotational Matrix Data for the dataset
@@ -55,12 +60,17 @@ numSensors = (size(kinematicData,2)-4)/12;
 metaData = zeros(2,3,numSensors);
 
 posDataCols = [];
+markDataCols = [];
 
 for index=1:numSensors
     posDataCols = horzcat(posDataCols,1+((index-1)*12):3+((index-1)*12));
+    markDataCols = horzcat(markDataCols,(4+(index-1)*12):(12*index));
     metaData(1,:,index) = min(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
     metaData(2,:,index) = max(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
 end
+
+posDataCols
+markDataCols
 
 %Check to see if whether we're processing a whole set, or trial mode only
 numCells = 1;
@@ -71,6 +81,11 @@ end
 posData = cell(1,numCells);
 rotMatData = cell(1,numCells);
 
+%Begin by converting all position data in the dataset by the stated
+%conversion factor.
+
+kinematicData(:,posDataCols) = kinematicData(:,posDataCols).*posConvFact;
+
 %Assemble the Position Data and Rotation Data Matrices
 for trial=1:numCells
       
@@ -78,13 +93,16 @@ for trial=1:numCells
     %simply equal to the whole dataset.  If we're grabbing trial by
     %trial data, then we use logical indexing to specify which portions
     %of the trial to grab.
+    %
+    %Further -- At this point, multiply the positional data by the
+    %conversion factor to yield the proper final output.
     if(numCells==1)
         trialData=kinematicData;
     else
         trialData=kinematicData((kinematicData(:,end-1)==trial),:);
     end
     
-    %Grab the position data from the trial data    
+    %Grab the position data from the trial data
     posData{trial} = num2cell(trialData(:,posDataCols));
     
     %Assemble the rotational matrix data
@@ -107,5 +125,8 @@ end
 %Assemble the Mark Data Matrix
 markData = zeros(max(kinematicData(:,end-3)),numSensors*12);
 for mInd = 1:size(markData,1)
-    markData(mInd,:) = kinematicData(kinematicData(:,end-3)==mInd,1:end-4);
+    %Grab the Position Data
+    markData(mInd,1:12) = kinematicData(kinematicData(:,end-3)==mInd,posDataCols);
+    %Grab the Rotation Matrices
+    markData(mInd,13:end) = kinematicData(kinematicData(:,end-3)==mInd,markDataCols);
 end

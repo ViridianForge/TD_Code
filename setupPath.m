@@ -22,6 +22,7 @@ addpath([pwd '\Libs\']);
 addpath([pwd '\EMGLibs\']);
 addpath([pwd '\KinLibs\']);
 addpath([pwd '\GUILibs\']);
+addpath([pwd '\MarkLibs\']);
 
 %Prepare the workspace.
 clear all

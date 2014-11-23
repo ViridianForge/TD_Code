@@ -120,30 +120,33 @@ if(iscell(filesToProcess))
                     firstDataLine = firstDataLine{1}';
                     secondDataLine = secondDataLine{1}';
                     thirdDataLine = thirdDataLine{1}';
+                                       
+                    %Populate the new data line
                     
-                    %populate the new data line
-                    newConvLine(1:numSensors*12) = ...
-                        [
-                        %First Sensor - Columns - 2:7
-                        str2double(firstDataLine{2}), str2double(firstDataLine{3}), str2double(firstDataLine{4}),...
-                        str2double(firstDataLine{5}), str2double(firstDataLine{6}), str2double(firstDataLine{7}),...
-                        str2double(secondDataLine{5}), str2double(secondDataLine{6}), str2double(secondDataLine{7}),...
-                        str2double(thirdDataLine{5}), str2double(thirdDataLine{6}), str2double(thirdDataLine{7}),...
-                        %Second Sensor - Columns - 10:15
-                        str2double(firstDataLine{10}), str2double(firstDataLine{11}), str2double(firstDataLine{12}),...
-                        str2double(firstDataLine{13}), str2double(firstDataLine{14}), str2double(firstDataLine{15}),...
-                        str2double(secondDataLine{13}), str2double(secondDataLine{14}), str2double(secondDataLine{15}),...
-                        str2double(thirdDataLine{13}), str2double(thirdDataLine{14}), str2double(thirdDataLine{15}),...
-                        %Third Sensor - Columns - 18:23
-                        str2double(firstDataLine{18}), str2double(firstDataLine{19}), str2double(firstDataLine{20}),...
-                        str2double(firstDataLine{21}), str2double(firstDataLine{22}), str2double(firstDataLine{23}),...
-                        str2double(secondDataLine{21}), str2double(secondDataLine{22}), str2double(secondDataLine{23}),...
-                        str2double(thirdDataLine{21}), str2double(thirdDataLine{22}), str2double(thirdDataLine{23}),...
-                        %Fourth Sensor - Columns - 26:31
-                        str2double(firstDataLine{26}), str2double(firstDataLine{27}), str2double(firstDataLine{28}),...
-                        str2double(firstDataLine{29}), str2double(firstDataLine{30}), str2double(firstDataLine{31}),...
-                        str2double(secondDataLine{29}), str2double(secondDataLine{30}), str2double(secondDataLine{31}),...
-                        str2double(thirdDataLine{29}), str2double(thirdDataLine{30}), str2double(thirdDataLine{31})];
+                    %First Sensor Pos
+                    newConvLine(1:3) = [ str2double(firstDataLine{2}) str2double(firstDataLine{3}) -str2double(firstDataLine{4}) ];
+                    %First Sensor Rotation Matrix
+                    newConvLine(4:6) = [ str2double(firstDataLine{5}) str2double(firstDataLine{6}) str2double(firstDataLine{7}) ];
+                    newConvLine(7:9) = [ str2double(secondDataLine{5}) str2double(secondDataLine{6}) str2double(secondDataLine{7}) ];
+                    newConvLine(10:12) = [ str2double(thirdDataLine{5}) str2double(thirdDataLine{6}) str2double(thirdDataLine{7}) ];
+                    %Second Sensor Pos
+                    newConvLine(13:15) = [ str2double(firstDataLine{10}) str2double(firstDataLine{11}) -str2double(firstDataLine{12}) ];
+                    %Second Sensor Rotation Matrix
+                    newConvLine(16:18) = [ str2double(firstDataLine{13}) str2double(firstDataLine{14}) str2double(firstDataLine{15}) ];
+                    newConvLine(19:21) = [ str2double(secondDataLine{13}) str2double(secondDataLine{14}) str2double(secondDataLine{15}) ];
+                    newConvLine(22:24) = [ str2double(thirdDataLine{13}) str2double(thirdDataLine{14}) str2double(thirdDataLine{15}) ];
+                    %Third Sensor Pos
+                    newConvLine(25:27) = [ str2double(firstDataLine{18}) str2double(firstDataLine{19}) -str2double(firstDataLine{20}) ];
+                    %Third Sensor Rotation Matrix
+                    newConvLine(28:30) = [ str2double(firstDataLine{21}) str2double(firstDataLine{22}) str2double(firstDataLine{23}) ];
+                    newConvLine(31:33) = [ str2double(secondDataLine{21}) str2double(secondDataLine{22}) str2double(secondDataLine{23}) ];
+                    newConvLine(34:36) = [ str2double(thirdDataLine{21}) str2double(thirdDataLine{22}) str2double(thirdDataLine{23}) ];
+                    %Four Sensor Pos
+                    newConvLine(37:39) = [ str2double(firstDataLine{26}) str2double(firstDataLine{27}) -str2double(firstDataLine{28}) ];
+                    %Four Sensor Rotation Matrix
+                    newConvLine(40:42) = [ str2double(firstDataLine{29}) str2double(firstDataLine{30}) str2double(firstDataLine{31}) ];
+                    newConvLine(43:45) = [ str2double(secondDataLine{29}) str2double(secondDataLine{30}) str2double(secondDataLine{31}) ];
+                    newConvLine(46:48) = [ str2double(thirdDataLine{29}) str2double(thirdDataLine{30}) str2double(thirdDataLine{31}) ];
                     
                     %Note the mark number if the mark flag is present.
                     %Deactive the mark flag after, as only the first data
