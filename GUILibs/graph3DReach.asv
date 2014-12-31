@@ -1,0 +1,62 @@
+function graph3DReach(reachHandMat,trunkCOMMat, gTitle,outLoc)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%GRAPHPM3DREACH - Generates 3D Graphs of Subject Reach Trajectory
+%   This function generates a 3D graph of the trajectory of a subject's
+%   reaching hand using a segment of kinematic data that begins at the
+%   activation of the Subject's Prime Mover muscle and extends through the
+%   end of the reaching event.
+%
+%   Graphical representation of the trunk's COM was added at the request of
+%   Dr. Marjorie Woollacott in late May of 2014.
+%
+%AUTHOR: Wayne Manselle - March 2014
+%
+%INPUTS: reachHandMat -- the reaching hand to be visualized
+%        trunkCOMMat -- the trunk's COM to be visualized
+%        gTitle -- the Title to give the graph
+%        outLoc -- the location to save the generated graphs to
+%
+%ChangeLog -- 5/21/2013 -- Added visualization of the trunk COM to the code
+%base
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+reach3DGraph = figure;
+%Invert the X-Axis so left and right have a sign corresponding with how
+%left and right are represented on a cartesian plane.
+reachHandMat(:,1) = -1*reachHandMat(:,1);
+trunkCOMMat(:,1) = -1*trunkCOMMat(:,1);
+set(reach3DGraph,'Visible','off')
+%Plot Reaching Hand Data
+plot3(reachHandMat(:,1),reachHandMat(:,2),reachHandMat(:,3),'Color',[76 0 153])
+hold on
+%Plot Reaching Starting Point
+plot3(reachHandMat(1,1),reachHandMat(1,2),reachHandMat(1,3),'Color',[76 0 153],...
+    'Marker','O','MarkerSize',5,'MarkerFaceColor',[0 0 1])
+hold on
+%Plot Reaching Ending Point
+plot3(reachHandMat(end,1),reachHandMat(end,2),reachHandMat(end,3),'Color',...
+    [76 0 153],'Marker','d','MarkerSize',5,'MarkerFaceColor',[0 0 1])
+hold on
+
+%Plot Trunk COM Data
+%plot3(trunkCOMMat(:,1),trunkCOMMat(:,2),trunkCOMMat(:,3),'Color','red')
+%hold on
+%Plot Trunk COM Point
+%plot3(trunkCOMMat(1,1),trunkCOMMat(1,2),trunkCOMMat(1,3),'Color','red',...
+%    'Marker','O','MarkerSize',5,'MarkerFaceColor',[1 0 0])
+%hold on
+%Plot Trunk COM Point
+%plot3(trunkCOMMat(end,1),trunkCOMMat(end,2),trunkCOMMat(end,3),'Color',...
+%    'red','Marker','d','MarkerSize',5,'MarkerFaceColor',[1 0 0])
+%hold on
+
+xlabel('M/L Displacement from COB(cm)','FontWeight','bold')
+ylabel('A/P Displacement from COB(cm)','FontWeight','bold')
+zlabel('Vertical Displacement from COB (cm)','FontWeight','bold')
+title(gTitle,'interpreter', 'none')
+grid on
+axis square
+%We'll probably need to adjust the axis dimensions, will have to remember
+%that.
+print('-dmeta','-r600',[outLoc gTitle '_3DReach.emf']);
+end

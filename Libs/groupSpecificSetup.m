@@ -1,5 +1,5 @@
 function [ preEventTime, emgHeader, keyMuscChans, mergeMuscChans,...
-    mergeBack, aChans, muscGroupings, kinSampRate] = groupSpecificSetup( curSubj )
+    mergeBack, aChans, muscGroupings, kinSampRate, markFunc] = groupSpecificSetup( curSubj )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %GROUPSPECIFICSETUP Subject processing setup specific to the group the
 %subject belongs in.
@@ -25,7 +25,8 @@ function [ preEventTime, emgHeader, keyMuscChans, mergeMuscChans,...
 %             the reach.
 %             muscGroupings - Groupings of muscles to examine for
 %             coActivations.
-%             kinSampRate - The collection rate of kinematics for group   
+%             kinSampRate - The collection rate of kinematics for group
+%             markFunc - the Mark Analysis Function to use for this group
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 disp('Classifying Subject by Group.')
 
@@ -44,6 +45,7 @@ switch curSubj(1:2)
         aChans = [1 2 3 4 5 6 7 8 9];
         muscGroupings={[1;3],[1;5],[3;5],[1;3;5],[2;4],[2;6],[4;6],[2;4;6],[7;8]};
         kinSampRate = 84;
+        markFunc = @rachSanMarkAnalysis;
     case 'TD'
         disp('Subject in Typically Developing Infant Group.')
         preEventTime = 500;
@@ -55,6 +57,7 @@ switch curSubj(1:2)
         aChans = [1 3 5 7 8; 2 4 6 7 8];
         muscGroupings={[1;3],[1;5],[3;5],[1;3;5],[2;4],[2;6],[4;6],[2;4;6],[7;8]};
         kinSampRate = 84;
+        markFunc = @rachSanMarkAnalysis;
     case 'CP'
         disp('Subject in Children with CP Group.')
         preEventTime = 500;
@@ -66,6 +69,7 @@ switch curSubj(1:2)
         aChans = [1 3 5 7 8 9 ; 2 4 6 7 8 9];
         muscGroupings={[1;3],[1;5],[3;5],[1;3;5],[2;4],[2;6],[4;6],[2;4;6],[7;8],[7;9],[8;9],[7;8;9]};
         kinSampRate = 84;
+        markFunc = @rachSanMarkAnalysis;
     %In order to add new Subject Groups, starting above this line, begin
     %adding a copy of one of the previously established case statements,
     %using the new Subject Group's two letter identifier code in place of
@@ -76,7 +80,8 @@ switch curSubj(1:2)
         preEventTime = NaN;
         [emgHeader,keyMuscChans,mergeMuscChans,aChans]=deal([]);
         mergeBack = 0;
-        kinSampRate = 0;
         muscGroupings={};
+        kinSampRate = 0;
+        markFunc = 0;
 end
 end

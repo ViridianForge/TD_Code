@@ -1,4 +1,4 @@
-function [ rpiHead, rpiTrunk, centerData ] = rachSanMarkAnalysis( markData )
+function [ cellOutput ] = rachSanMarkAnalysis( cellInput )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %RACHSANMARKANALYSIS Analyze Mark Data from Rachwani-Santamaria paradigm
 %   This function calculates mark data analyses and other meta-data from
@@ -22,20 +22,43 @@ function [ rpiHead, rpiTrunk, centerData ] = rachSanMarkAnalysis( markData )
 %   Sensor 3 -- 31:39
 %   Sensor 4 -- 40:48
 %
+%   This function also transforms the position data given to it, generating
+%   virtual position markers based on the marker data.  For legacy reasons,
+%   these virtual position data markers will be inserted directly into the
+%   data set.
+%   Virtual Head Center Of Mass -- Inserted Between Sensors 1 and 2
+%   Virtual Trunk Center Of Mass -- Inserted Between Sensors 2 and 3
+%
 %
 %Author: Wayne Manselle
 %Date: November 2014
 %
 %Inputs:
-%   markData -- The Mark Data to Analyze
+%   cellInput -- The collected input sent to the mark function.  In the
+%   case of the rachSanMarkAnalysis function, the cell input is comprised
+%   of two components: 
+%       1 -- The collection of Mark Data
+%       2 -- The collection of Position Data to be modified with the
+%       virtual positional and rotational matrices.
 %
 %Outputs:
-%   rpiHead -- Whatever RPI stands for, related to the head.  RPI is a
-%   vector between a Rotational Matrix and a point
-%   rpiTrunk -- RPI data for the Trunk
-%   bosData -- Centering data for both the center of base of support and
-%              the center point of the trunk
+%   cellOutput -- The collected output of the mark function.  In the case
+%   of the rachSanMarkAnalysis fuction, the cell output is comprised of
+%   two components:
+%       1 -- The collection of metadata produced by the function.  This
+%       metadata is comprised of three components:
+%               A -- RPI of the Head
+%               B -- RPI of the Trunk
+%               C -- Data related to the composition and location of the
+%               center of Base of Support and Center of Trunk
+%               D -- Max Head Height
+%               E -- Max Trunk Height
+%       2 -- The corrected kinematic data to be used.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Retrieve Mark and Kinematic Data from the Cell Array Input
+markData = cellInput{1};
+kinData = cellInput{2};
 
 %Prep the Output Variables
 rpiHead = zeros(1,3);
@@ -121,5 +144,41 @@ matC7(3,:) = markData(7,28:30);
 
 %Finally, calculate RPI_TrunkData.  
 rpiTrunk(:) = matC7' * vTrunk';
+
+%Now generate the virtual position points and correct for center of base of
+%support.
+virtHdCOMPos = zeros(size(kinData(:,1:3)));
+virtTkCOMPos = zeros(size(kinData(:,4:6)));
+
+%Pre-allocate the corrected Kinematic Data Structure, adding 24 columns to
+%handle the virtual marker's position and rotational matrix data
+corrKinData = zeros(size(kinData,1),size(kinData,2)+24);
+
+for vrInd = 1:size(kinData(:,1:3),1)
+    %Generate virtual marker positions
+    virtHdCOMPos(vrInd,1:3) = (matHdCenter * rpiHead')' + kinData(vrInd,1:3);
+    virtTkCOMPos(vrInd,1:3) = (matC7 * rpiTrunk')' + kinData(vrInd,4:6);
+    
+    %Build the next row of data, and correct for Base of Support Offset
+    corrKinData(vrInd,:) = horzcat((kinData(vrInd,1:3) - centerData(3,7:9)), kinData(vrInd,4:12),...
+    (virtHdCOMPos(vrInd,:) - centerData(3,7:9)),kinData(vrInd,4:12),...
+    (kinData(vrInd,13:15) - centerData(3,7:9)),kinData(vrInd,16:24),...
+    (virtTkCOMPos(vrInd,:) - centerData(3,7:9)),kinData(vrInd,16:24),...
+    (kinData(vrInd,25:27) - centerData(3,7:9)),kinData(vrInd,28:36),...
+    (kinData(vrInd,37:39) - centerData(3,7:9)),kinData(vrInd,40:end));
+end
+
+%Put together Output Variables
+metaData = cell(1,3);
+metaData(1) = {rpiHead};
+metaData(2) = {rpiTrunk};
+metaData(3) = {centerData};
+%Max Head and Trunk Height
+metaData(4) = {max(corrKinData(:,15))};
+metaData(5) = {max(corrKinData(:,39))};
+
+cellOutput = cell(1,2);
+cellOutput{1} = metaData;
+cellOutput{2} = corrKinData;
 
 end

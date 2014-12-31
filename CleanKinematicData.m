@@ -27,7 +27,7 @@ end
 %method will return the preEvent time to examine, and EMG channels to
 %examine for the group that subject belongs to.
 [preEventLength, emgHeaders, keyMuscChans, mergeMuscChans, mergeBack,...
-    aChans, muscGroupings, kinSampRate] = groupSpecificSetup(curSubj);
+    aChans, muscGroupings, kinSampRate, markFunc] = groupSpecificSetup(curSubj);
 
 
 %Begin setting up constants for file output.  Headers and whatnot.
@@ -120,15 +120,20 @@ for level=1:length(levelText)
         %Pull out the separated trial data and other relevant data from the Kin
         %Data.
         
-        %The Matrices here are:
-        %Mat 1 -- An arrangement of cells, each cell containing a given trial's
-        %kinematic data.
-        %Mat 2 -- Mark Data
-        %Mat 3 -- rpi Data
-        %Mat 4 -- Base of Support Data
-        
-        [kinTrialData,rotTrialData, markData,rpiData,bosData, maxHdHt,...
-            maxTkHt] = FranEraBirdConverter(kinRawData);
+        %The first thing we need to do is determine if the file is in a
+        %General Kinematic Format, or in the Oklahoma Format.
+        [kinRawPath, kinRawName, kinRawExt] = fileparts(kinRawData);
+        if(strcmp(kinRawExt,'.gkf'))
+            %Do GKF logic
+            [kinTrialData, rotTrialData, markData, rpiData, bosData,...
+                maxHdHt, maxTkHt, rpi_TrunkData, fDataLineOverTime] = ...
+                procGKFFile(kinRawData, markFunc);
+        else
+            %Do Oklahoma logic
+            [kinTrialData, rotTrialData, markData, rpiData, bosData,...
+                maxHdHt, maxTkHt, rpi_TrunkData, fDataLineOverTime] = ...
+                procOklahomaFile(kinRawData);
+        end
               
         %Review kinematic data for approval
         procLevel = questdlg(['Would you like to review the Kinematic data for the ' levelText{level} ' level?'],...
@@ -138,13 +143,6 @@ for level=1:length(levelText)
         else
             acceptableKinTrials = ones(size(kinTrialData,1),1);
         end
-        
-        
-        %Convert Base of Support and Mark location Data into cm from inches
-        %Please note that mark data and base of support data locations have
-        %their zero referenced to the transmitter.
-        markData=horzcat(markData(:,1:12).*2.54,markData(:,13:end));
-        bosData=bosData.*2.54;
         
         %Save the mark data and the relative rotation matrices for Victor's
         %use.

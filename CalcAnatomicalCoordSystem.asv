@@ -1,0 +1,206 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%CALCANATOMICALCOORDSYSTEM.M -- This script contains all the steps and
+%interaction necessary to derive the anatomical and joint coordinate
+%systems for the Head and Trunk from the Rachwani-Santamaria TD
+%Longitudinal Experiment.
+%
+%To generate these ACS files, we rely on the mark and base of support data
+%calculated during the initial analysis of the subject's kinematic data
+%files.  As such, it is essential that the cleanKinData.m script be run on
+%the subject's data before this script, so all necessary data files exist.
+%
+%The final output from this script will be two csv files, consisting of the
+%Head and Trunk Anatomical Coordinate Systems.  These files will be in the
+%following format:
+%
+%HEADERS -- i  j  k
+%DATA    -- ix jx kx
+%           iy jy ky
+%           iz jz kz
+%
+%Author -- Wayne Manselle
+%Date -- June 2014
+%Changelog -- Initial Creation - 6/4/2014
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%Stage 0 -- Library and Constant Setup%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%See setupPath.m to ensure all paths are correctly set.
+setupPath()
+
+%Get the list of all subject files that need processing.
+[fileList, levelText, topDir, curSubj] = CollectKinematicFiles();
+
+%Error safety check.  If the user presses cancel or something.
+if(topDir==0)
+    disp('No files found for subject.  Please review their data directory.')
+    return
+end
+
+%%Begin Generating the ACS for each level
+disp('Beginning Generation of Anatomical Coordinate Systems.')
+for sLevel=1:size(levelText,2)
+    
+    curLev = levelText{sLevel};
+    
+    %%STEP 1 -- Load the Data!
+    dataLocation = [topDir '\Output\Kinematics' curLev];
+    kinRawData = fileList{sLevel,3};
+    
+    %Load the Raw Kinematic File for this level in order to get access to
+    %the trial by trial rotational matrices for Stage 2 and 3 processing
+    [kinTrialData,rotTrialData, markData,rpiData,bosData, maxHdHt,...
+        maxTkHt] = FranEraBirdConverter(kinRawData);
+    
+    %We'll also need the event times for this level.
+    if(exist([topDir '\Output\Kinematics' curLev 'Left_Reach_corrReachOnsetsDP.csv'],'file'))
+        reachEvents{1} = csvread([topDir '\Output\Kinematics' curLev 'Left_Reach_corrReachOnsetsDP.csv'],1,0);
+    else
+        reachEvents{1} = nan;
+    end
+    
+    if(exist([topDir '\Output\Kinematics' curLev 'Left_Reach_corrReachOnsetsDP.csv'],'file'))
+        reachEvents{2} = csvread([topDir '\Output\Kinematics' curLev 'Right_Reach_corrReachOnsetsDP.csv'],1,0);
+    else
+        reachEvents{2} = nan;
+    end
+    
+    %The CBOS data for the Subject,Session,Level combo
+    levBOSData = csvread([dataLocation 'BOSData.csv'],1,1);
+    %Grab the position data marking the derived center of base of support.
+    %Invert the matrix to play nicely with the reshaped marker data
+    %matrices coming up below.
+    
+    %multiplying the z component of cbos data by -1:
+    %assuming that we are using the cbos data output
+    levBOSData(3,9)=levBOSData(3,9)*(-1);
+    cbosPosData = levBOSData(3,7:9)';
+    
+    %The Mark data for the Subject,Session,Level combo
+    levMarkData = csvread([dataLocation 'MarkData.csv'],1,0);
+    %Grab the position data from the sensors for Marks 3 and 7, as
+    %prescribed, and reshape so each row is one sensor's data.
+    
+    %multiplying the z component of mark data by -1:
+    %assuming that we are using the file mark data output
+    levMarkData(:,3:3:12) = levMarkData(:,3:3:12)*(-1);
+    
+    mark3PosData = reshape(levMarkData(3,1:12),3,4);
+    mark7PosData = reshape(levMarkData(7,1:12),3,4);
+    
+    %%Create Anatomical Coordinate System for the Head
+    %Head ACS needs Data from Mark 3, Sensors 1, 3 and 4. (HdTrk,L.Arm,R.Arm)
+    %Origin Head  = ((Sensor 4 + Sensor 3)/2)
+    
+    originPosHd = (mark3PosData(:,4) + mark3PosData(:,3))/2;
+    %iVector Calcs
+    %Sensor 3 - Origin Head = iVecHd
+    %(iVecHd/norm(iVecHd)) = iUnitVecHd
+    iVecHd = mark3PosData(:,3) - originPosHd;
+    
+    iUnitVecHd = (iVecHd/norm(iVecHd));
+    
+    %Y Coordinate of Sensor 1 - Y Coordinate of Origin Head = Y Virtual Hd Top
+    %Virtual Hd Top (x,y,z) = Head Origin X, Head Origin Y, Sensor 1 Z
+    virPosHdTop = [originPosHd(1);originPosHd(2);mark3PosData(3,1)];
+    
+    %Virtual Hd Top (x,y,z) - Origin Head = VecHdTop
+    %(jVecHd/norm(jVecHd)) = jUnitVecHd
+    VecHdTop = virPosHdTop - originPosHd;
+    
+    jVecHd = cross(iVecHd,VecHdTop);
+    jUnitVecHd = (jVecHd/norm(jVecHd));
+    
+    %iUnitVecHd crossproduct jUnitVecHd = kUnitVecHd
+    kUnitVecHd = cross(iUnitVecHd,jUnitVecHd);
+    
+    %Concatenate the transposed Unit Vectors together into the final ACS
+    %for the head.  i,j,k ordering.
+    
+    acsHead = horzcat(iUnitVecHd,jUnitVecHd,kUnitVecHd);
+    
+    %%Create Anatomical Coordinate System for the Trunk
+    %Trunk ACS needs data from Mark 7 AND the CBOS file
+    %From Mark 7
+    %(Sensor 4 + Sensor 2)/2 = OriginTrunk
+    originPosTrunk = (mark7PosData(:,4) + mark7PosData(:,2))/2;
+    
+    %jVecCalcs
+    %(Sensor 4 - OriginTrunk) = jVecTrunk
+    %(jVecTrunk/norm(jVecTrunk)) = jUnitVecTrunk
+    jVecTrunk = mark7PosData(:,4) - originPosTrunk;
+    jUnitVecTrunk = (jVecTrunk/norm(jVecTrunk));
+    
+    %kVecCalcs
+    %(CBOS - originTrunk) = kVecTrunk
+    %(kVecTrunk/normkVecTrunk) = kUnitVecTrunk
+    kVecTrunk = cbosPosData - originPosTrunk;
+    kUnitVecTrunk = (kVecTrunk/norm(kVecTrunk));
+    
+    %jUnitVecTrunk crossproduct kUnitVecTrunk = iUnitVecTrunk
+    iUnitVecTrunk = cross(jUnitVecTrunk,kUnitVecTrunk);
+    
+    %Concatenate the transposed Unit Vectors together into the final ACS
+    %for the trunk.  i,j,k ordering.
+    acsTrunk = horzcat(iUnitVecTrunk,jUnitVecTrunk,kUnitVecTrunk);
+    
+    %Save the ACS of the Head for this level.
+    cell2csv([dataLocation 'AnatomicalHeadCoordinateSystem.csv'],...
+        vertcat({'i','j','k'},num2cell(acsHead)));
+    
+    %Save the ACS of the Trunk for this level.
+    cell2csv([dataLocation 'AnatomicalTrunkCoordinateSystem.csv'],...
+        vertcat({'i','j','k'},num2cell(acsTrunk)));
+    
+    %%Stage 2 -- Use the ACS and TCS to modify the rotational matrices
+    for reachType=1:2
+        if(~isnan(reachEvents{reachType}))
+            curEvSet = reachEvents{1};
+            for event=1:size(curEvSet,1)
+                curEvent = curEvSet(event,:);
+                %Look at the time data here get on and off and trial
+                if(curEvent(1)~=0)
+                    trial=curEvent(5);
+                    eventOn=curEvent(3);
+                    eventOff=curEvent(4);
+                    curTrial = rotTrialData{trial};
+                    curRegion = curTrial(eventOn:eventOff,:);
+                    for dataLine=1:size(curRegion,1)
+                        
+                        %Calculate translated rotational matrices.
+                        hdWRTGlob=curRegion{dataLine,1} * acsHead;
+                        tkWRTGlob=curRegion{dataLine,2} * acsTrunk;
+                        hdWRTTk=(((curRegion{dataLine,1}' * acsHead') * curRegion{dataLine,2}) * acsTrunk);
+                        
+                        %Append these matrices to their own files for
+                        %eventual saving.
+                
+                        %%Stage 3 -- Get the angles of each of these matrices?
+                        %Also, make sure you have the right locations!
+                        
+                        %Head with Respect to Global
+                        gammaHG = atan2(hdWRTTk(3,3),hdWRTTk(2,3));
+                        betaHG = atan2(hdWRTTk(3,3),-hdWRTTk(1,3)*cos(gammaHG));
+                        alphaHG = atan2(hdWRTTk(1,1),hdWRTTk(1,2));
+                        
+                        %Trunk with Respect to Global
+                        gammaTG = atan2(hdWRTTk(3,3),hdWRTTk(2,3));
+                        betaTG = atan2(hdWRTTk(3,3),-hdWRTTk(1,3)*cos(gammaTG));
+                        alphaTG = atan2(hdWRTTk(1,1),hdWRTTk(1,2));
+                        
+                        %Head with Respect to Trunk
+                        gammaHT = atan2(hdWRTTk(3,3),hdWRTTk(2,3));
+                        betaHT = atan2(hdWRTTk(3,3),-hdWRTTk(1,3)*cos(gammaHT));
+                        alphaHT = atan2(hdWRTTk(1,2),hdWRTTk(1,1));
+                        
+                        %Here's where we'll put all this into a file
+                        %structure.
+                    end
+                end
+            end
+        else
+            disp('No reaches of this type at this level.')
+        end
+    end
+end
+
+disp('Coordinate Systems Generated.  Exiting Script.')

@@ -68,7 +68,17 @@ for level=1:length(levels)
         levelText = horzcat(levelText, levels(level));
         osHandFileList = dir([openSHAPADir levels{level} 'HandOutput*.csv']);
         oSOutputFile = dir([openSHAPADir levels{level} 'Output*.csv']);
-        kinFile = dir([topDir levels{level} 'KIN\*.txt']);
+        
+        %Begin by testing to see if General Kinematic Format files are
+        %available for the subject.
+        kinFile = dir([topDir levels{level} 'KIN\*.gkf']);
+        
+        %If there are no GKF files available for the subject, fall back to
+        %looking for Oklahoma-Formatted files.
+        if(isempty(kinFile))
+            kinFile = dir([topDir levels{level} 'KIN\*.txt']);
+        end
+        
         %Test to be sure data is actually there.
         if(~isempty(kinFile))
             disp(['Kinematic Data pertaining to ' levels{level} ' found.'])

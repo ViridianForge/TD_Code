@@ -1,5 +1,5 @@
 function [ posData, rotMatData, markData, metaData] = ...
-    GeneralKinematicDataConverter( kinDataFile, trialMode, posConvFact )
+    GeneralKinematicDataConverter( kinDataFile, trialMode, posConvFact, markFunc )
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %GeneralKinematicDataConverter.m - A generalized Kinematic Data Converter
 %   This function exists to allow for the access of Kinematic data from a
@@ -39,6 +39,9 @@ function [ posData, rotMatData, markData, metaData] = ...
 %   data was collected in inches and was wanted in centimeters, you'd pass
 %   the function 2.54.
 %
+%   markFunc -- The Mark Function to use in extracting meta data about the
+%   data collection, and generate any virtual data points necessary.
+%
 %Outputs:
 %   posData -- The Kinematic Position Data for the dataset
 %   rotMatData -- The Rotational Matrix Data for the dataset
@@ -55,22 +58,13 @@ kinematicData = csvread(kinDataFile,3,0);
 %dictating how to pull data from the file.
 numSensors = (size(kinematicData,2)-4)/12;
 
-%Prepare storage for the metadata, a 2x3 matrix for each of the sensors in 
-%the collection's sensor array.
-metaData = zeros(2,3,numSensors);
-
 posDataCols = [];
 markDataCols = [];
 
 for index=1:numSensors
     posDataCols = horzcat(posDataCols,1+((index-1)*12):3+((index-1)*12));
     markDataCols = horzcat(markDataCols,(4+(index-1)*12):(12*index));
-    metaData(1,:,index) = min(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
-    metaData(2,:,index) = max(kinematicData(:,1+((index-1)*12):3+((index-1)*12)));
 end
-
-posDataCols
-markDataCols
 
 %Check to see if whether we're processing a whole set, or trial mode only
 numCells = 1;
@@ -78,13 +72,43 @@ if(trialMode == 1)
     numCells = max(kinematicData(:,end-1));
 end
 
-posData = cell(1,numCells);
-rotMatData = cell(1,numCells);
+posData = cell(numCells,1);
+rotMatData = cell(numCells,1);
 
 %Begin by converting all position data in the dataset by the stated
 %conversion factor.
 
 kinematicData(:,posDataCols) = kinematicData(:,posDataCols).*posConvFact;
+
+%Assemble the Mark Data Matrix
+markData = zeros(max(kinematicData(:,end-3)),numSensors*12);
+for mInd = 1:size(markData,1)
+    %Grab the Position Data
+    markData(mInd,1:12) = kinematicData(kinematicData(:,end-3)==mInd,posDataCols);
+    %Grab the Rotation Matrices
+    markData(mInd,13:end) = kinematicData(kinematicData(:,end-3)==mInd,markDataCols);
+end
+
+%Use the Mark Data and the Mark Function to make any necessary
+%transformational changes to the data.  If there is no Mark Function
+%passed, then don't do anything.
+if(isa(markFunc,'function_handle'))
+    cellOutput = markFunc({markData, kinematicData});
+    %Compile Meta Data
+    metaData = cellOutput{1};
+    %Replace Kinematic Data
+    kinematicData = cellOutput{2};
+end
+
+%Regenerate the Position and Mark Data Columns, as they may have been
+%changed by the Mark Function.
+numSensors = (size(kinematicData,2)-4)/12;
+posDataCols = [];
+markDataCols = [];
+for index=1:numSensors
+    posDataCols = horzcat(posDataCols,1+((index-1)*12):3+((index-1)*12));
+    markDataCols = horzcat(markDataCols,(4+(index-1)*12):(12*index));
+end
 
 %Assemble the Position Data and Rotation Data Matrices
 for trial=1:numCells
@@ -101,9 +125,9 @@ for trial=1:numCells
     else
         trialData=kinematicData((kinematicData(:,end-1)==trial),:);
     end
-    
+        
     %Grab the position data from the trial data
-    posData{trial} = num2cell(trialData(:,posDataCols));
+    posData(trial) = {trialData(:,posDataCols)};
     
     %Assemble the rotational matrix data
     %As we're de-linearizing the 3x3 rotational matrices, and assembling an
@@ -120,13 +144,4 @@ for trial=1:numCells
         end
     end
     rotMatData{trial} = rotMatTrial;
-end
-
-%Assemble the Mark Data Matrix
-markData = zeros(max(kinematicData(:,end-3)),numSensors*12);
-for mInd = 1:size(markData,1)
-    %Grab the Position Data
-    markData(mInd,1:12) = kinematicData(kinematicData(:,end-3)==mInd,posDataCols);
-    %Grab the Rotation Matrices
-    markData(mInd,13:end) = kinematicData(kinematicData(:,end-3)==mInd,markDataCols);
 end

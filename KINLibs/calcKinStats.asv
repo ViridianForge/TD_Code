@@ -68,21 +68,19 @@ function [ reachKinStats ] = calcKinStats( kinEventData, reachHand, ...
 %   Col 37 -- Abs. Avg AP TrunkCOMCBOS Angular Velocity -- degrees/sec
 %   Col 38 -- Avg AP TrunkCOMCBOS Angular Velocity -- degrees/sec
 %   Col 39 -- Std AP TrunkCOMCBOS Angular Velocity -- degrees/sec
-%   Col 40 -- Total AP TrunkCOMCBOS Angular Displacement -- degrees
-%   Col 41 -- Avg Resultant TrunkCOMCBOS Speed --  degrees/sec
-%   Col 42 -- Total Resultant TrunkCOMCBOS Angular Displacement -- degrees/sec
-%   Col 43 -- Normalized Jerk Squared -- Hz (inverse seconds)
-%   Col 44 -- Total Path Length in AP Axis of Reaching Hand -- cm
-%   Col 45 -- Total Path Length in AP Axis of TrunkCOM -- cm
-%   Col 46 -- Trunk Coupling of Reach Motion -- cm
-%   Col 47 -- Mean Curvature of the Reach -- Unitless
-%   Col 48 -- Standard Deviation of Curvature of the Reach -- Unitless
-%   Col 49 -- Max Abs Cross Correlation Coefficient between trunk and arm
-%   Col 50 -- Lag where the Maximum Correlation Coefficient can be found
+%   Col 41 -- Total AP TrunkCOMCBOS Angular Displacement -- degrees
+%   Col 42 -- Avg Resultant TrunkCOMCBOS Speed --  degrees/sec
+%   Col 43 -- Total Resultant TrunkCOMCBOS Angular Displacement -- degrees/sec
+%   Col 44 -- Normalized Jerk Squared -- Hz (inverse seconds)
+%   Col 45 -- Total Path Length in AP Axis of Reaching Hand -- cm
+%   Col 46 -- Total Path Length in AP Axis of TrunkCOM -- cm
+%   Col 47 -- Trunk Coupling of Reach Motion -- cm
+%   Col 48 -- Mean Curvature of the Reach -- Unitless
+%   Col 49 -- Standard Deviation of Curvature of the Reach -- Unitless
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %Storage array for all stats from this reach.
-reachKinStats = zeros(1,50);
+reachKinStats = zeros(1,49);
 
 %A chunk of code to create the timeline to graph motion in various planes
 %against.  Grabbing the length of one of the matrix columns, as they're all
@@ -112,20 +110,6 @@ for i=1:5
         (kinEventData(end,3*i+3)-kinEventData(1,3*i+3))^2);
 end
 
-%Perform Cross Correlation Analysis between the trunk and arm to determine
-%whether or not the movement is coupled.
-[maxCor, lagLoc] = max(abs(crosscorr(resPosMat(:,2),resPosMat(:,reachHand))));
-reachKinStats(49) = maxCor;
-%The subtraction by 21 here is because the default lag arrangement for
-%crosscorr is lag -20 to lag 20.  Subtracting by 21 ensures that the lag
-%representing time 0 has a value of 0.
-reachKinStats(50) = lagLoc - 21;
-
-%Generate the Cross-Correlation Graphs -- Temp Code
-%figure('Visible','off'),stem(lagLoc,maxCor);hold on
-%xlabel('lag'),ylabel('crosscorr'),title('Cross Correlation Coefficients By Lag')
-%print('-dmeta','-r600',[num2str(second(now)) '_CorrGraph.emf'])
-
 %Calculate Component Velocities and Accelerations
 %Using MATLAB's built in differentiation function, which specifically is
 %calculating the nth difference along dimension x.  (i.e. the 1st
@@ -142,7 +126,7 @@ reachHandVel = reachHandVel(1:end-1,:);
 
 %Calculate the Mean-Squared Jerk and log
 njs = normalizedJerkSquared(resPosDiffMat(:,reachHand),11.9);
-reachKinStats(43) = njs;
+reachKinStats(44) = njs;
 
 curv=zeros(size(reachHandAcc,1),1);
 
@@ -154,8 +138,8 @@ for curvCnt=1:size(reachHandAcc,1)
         /((reachHandVel(curvCnt,1)^2+reachHandVel(curvCnt,2)^2+reachHandVel(curvCnt,3)^2)^(3/2));
 end
 
-reachKinStats(47) = mean(curv);
-reachKinStats(48) = std(curv);
+reachKinStats(43) = mean(curv);
+reachKinStats(44) = std(curv);
 
 %Calculate Path Lengths
 %Built-in summation method, sums matrix along columns.
@@ -226,7 +210,7 @@ hdTkAngResDispMat = sqrt(hdTkAngDispMat(:,1).^2+hdTkAngDispMat(:,2).^2);
 tkCBOSAngResDispMat = sqrt(tkCBOSAngDispMat(:,1).^2+tkCBOSAngDispMat(:,2).^2);
 
 %Calculate and Properly Place the primary angular statistics we care about.
-outOffsets = [6,24];
+outOffsets = [6,22];
 for angType=1:2
     %Assign each group to our passthrough arrays as we need them.
     outAng = zeros(angRows-1,2);
@@ -243,31 +227,30 @@ for angType=1:2
     %Output array addressing is determined algorithmically here.
     %hdC7 arrays go in 7-20
     %c7CBOS arrays go in 21-33
-    reachKinStats(1+outOffsets(angType)) = mean(outAng(:,1));%7,25  ML Mean
-    reachKinStats(2+outOffsets(angType)) = std(outAng(:,1));%8,26  ML StDev
-    reachKinStats(3+outOffsets(angType)) = kinExtentFlexExt(outAng(:,1), 0); %9,27%Change to Jennifer's Special ML Min
-    reachKinStats(4+outOffsets(angType)) = kinExtentFlexExt(outAng(:,1), 1); %10,28%Change to Jennifer's Special ML Max
+    reachKinStats(1+outOffsets(angType)) = mean(outAng(:,1));%7,21  ML Mean
+    reachKinStats(2+outOffsets(angType)) = std(outAng(:,1));%8,22  ML StDev
+    reachKinStats(3+outOffsets(angType)) = kinExtentFlexExt(outAng(:,1), 0); %9,23%Change to Jennifer's Special ML Min
+    reachKinStats(4+outOffsets(angType)) = kinExtentFlexExt(outAng(:,1), 1); %10,24%Change to Jennifer's Special ML Max
     %NOTE -- Calculation alteration 02/07/2014 by Victor and Wayne
     %Angular Velocity = Total Angular Displacement / Length of Trial
     %(Degrees/Sec)
-    reachKinStats(5+outOffsets(angType)) = (sum(abs(outAngDispMat(:,1))))./trialDur;%11,29 Abs. Avg ML Velocity
-    reachKinStats(6+outOffsets(angType)) = mean(outAngDispMat(:,1)./0.0119); %12,30 Avg. ML Velocity
-    reachKinStats(7+outOffsets(angType)) = std(outAngDispMat(:,1)./0.0119); %13,31 Std. ML Velocity
-    reachKinStats(8+outOffsets(angType)) = sum(abs(outAngDispMat(:,1)));%14,32 ML Path Length
-    reachKinStats(9+outOffsets(angType)) = mean(outAng(:,2));%15,33 AP Mean
-    reachKinStats(10+outOffsets(angType)) = std(outAng(:,2));%16,34 AP STD
+    reachKinStats(5+outOffsets(angType)) = (sum(abs(outAngDispMat(:,1))))./trialDur;%11,25 Avg ML Velocity
+    reachKinStats(6+outOffsets(angType))
+    reachKinStats(7+outOffsets(angType)) = sum(abs(outAngDispMat(:,1)));%12,26 ML Path Length
+    reachKinStats(8+outOffsets(angType)) = mean(outAng(:,2));%13,27 AP Mean
+    reachKinStats(9+outOffsets(angType)) = std(outAng(:,2));
     
-    reachKinStats(11+outOffsets(angType)) = kinExtentFlexExt(outAng(:,2), 0);%17,35 Change to Jennifer's Special AP Min
-    reachKinStats(12+outOffsets(angType)) = kinExtentFlexExt(outAng(:,2), 1);%18,36 Change to Jennifer's Special AP Max
+    %14,28 AP StDev
+    reachKinStats(10+outOffsets(angType)) = kinExtentFlexExt(outAng(:,2), 0);%15,29 Change to Jennifer's Special AP Min
+    reachKinStats(11+outOffsets(angType)) = kinExtentFlexExt(outAng(:,2), 1);%16,30 Change to Jennifer's Special AP Max
     %NOTE -- Calculation alteration 02/07/2014 by Victor and Wayne
     %Angular Velocity = Total Angular Displacement / Length of Trial
     %(Degrees/Sec)
-    reachKinStats(13+outOffsets(angType)) = (sum(abs(outAngDispMat(:,2))))./trialDur;%19,37 Abs. Avg AP Velocity
-    reachKinStats(14+outOffsets(angType)) = mean(outAngDispMat(:,2)./0.0119);%20,38 Avg AP Velocity
-    reachKinStats(15+outOffsets(angType)) = std(outAngDispMat(:,2)./0.0119);%21,39 Avg AP Velocity
-    reachKinStats(16+outOffsets(angType)) = sum(abs(outAngDispMat(:,2)));%22,40 AP Path Length
-    reachKinStats(17+outOffsets(angType)) = mean(outAngResDisp)./0.0119;%23,41 Mean Result Velocity
-    reachKinStats(18+outOffsets(angType)) = sum(outAngResDisp);%24,42 Total Resultant Path length
+    reachKinStats(12+outOffsets(angType)) = (sum(abs(outAngDispMat(:,2))))./trialDur;%17,31 Avg AP Velocity
+    reachKinStats(13+outOffsets(angType)) = (sum(abs(outAngDispMat(:,2))))./trialDur;%17,31 Std AP Velocity
+    reachKinStats(14+outOffsets(angType)) = sum(abs(outAngDispMat(:,2)));%18,32 AP Path Length
+    reachKinStats(15+outOffsets(angType)) = mean(outAngResDisp)./0.0119;%19,33 Mean Result Velocity
+    reachKinStats(16+outOffsets(angType)) = sum(outAngResDisp);%20,34 Total Resultant Path length
 end
 
 %Calculate the total 
@@ -279,11 +262,11 @@ for ind=2:size(kinEventData,1)
 end
 
 %Total Y Axis Path Length for the Reaching Hand
-reachKinStats(44)=totPLYReach;
+reachKinStats(36)=totPLYReach;
 %Total Y Axis Path Length for the Trunk COM -- This should be column 11
-reachKinStats(45)=totPLYTrunk;
+reachKinStats(37)=totPLYTrunk;
 %Total Reach Coupling - This is determined by calculating the percentage of
 %the reaching hand's Y excursion that can be derived from the trunk's Y
 %excursion.
-reachKinStats(46)=(totPLYTrunk/totPLYReach)*100;
+reachKinStats(38)=(totPLYTrunk/totPLYReach)*100;
 end

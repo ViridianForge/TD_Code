@@ -77,12 +77,11 @@ function [ reachKinStats ] = calcKinStats( kinEventData, reachHand, ...
 %   Col 46 -- Trunk Coupling of Reach Motion -- cm
 %   Col 47 -- Mean Curvature of the Reach -- Unitless
 %   Col 48 -- Standard Deviation of Curvature of the Reach -- Unitless
-%   Col 49 -- Max Abs Cross Correlation Coefficient between trunk and arm
-%   Col 50 -- Lag where the Maximum Correlation Coefficient can be found
+%   Col 49 -- Cross Correlation between trunk and arm
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %Storage array for all stats from this reach.
-reachKinStats = zeros(1,50);
+reachKinStats = zeros(1,49);
 
 %A chunk of code to create the timeline to graph motion in various planes
 %against.  Grabbing the length of one of the matrix columns, as they're all
@@ -114,17 +113,18 @@ end
 
 %Perform Cross Correlation Analysis between the trunk and arm to determine
 %whether or not the movement is coupled.
-[maxCor, lagLoc] = max(abs(crosscorr(resPosMat(:,2),resPosMat(:,reachHand))));
-reachKinStats(49) = maxCor;
-%The subtraction by 21 here is because the default lag arrangement for
-%crosscorr is lag -20 to lag 20.  Subtracting by 21 ensures that the lag
-%representing time 0 has a value of 0.
-reachKinStats(50) = lagLoc - 21;
 
-%Generate the Cross-Correlation Graphs -- Temp Code
-%figure('Visible','off'),stem(lagLoc,maxCor);hold on
-%xlabel('lag'),ylabel('crosscorr'),title('Cross Correlation Coefficients By Lag')
-%print('-dmeta','-r600',[num2str(second(now)) '_CorrGraph.emf'])
+%Temporary Code, whip out some of those graphs that Pablo put together.
+[CC1,LAG1,bounds1] = crosscorr(resPosMat(:,2),resPosMat(:,reachHand));
+[ll1,maxCC1] = max(abs(CC1));
+disp('Lag Value for this reach');
+disp(LAG1(maxCC1))
+
+figure,stem(LAG1,CC1);hold on, plot(LAG1,bounds1(1),'r'),plot(LAG1,bounds1(2),'r')
+xlabel('lag'),ylabel('crosscorr'),title('No Title')
+
+
+reachKinStats(49) = max(abs(crosscorr(resPosMat(:,2),resPosMat(:,reachHand))));
 
 %Calculate Component Velocities and Accelerations
 %Using MATLAB's built in differentiation function, which specifically is

@@ -1,0 +1,451 @@
+function [ trialData, rotMData, markData, rpiData, bosData, maxHdHt, maxC7Ht, rpi_TrunkData, fDataLineOverTime] = ...
+    FranEraBirdConverter( birdFile )
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%FRANERABIRDCONVERTER
+% This function is intended to import the data output of the MiniBIRD
+% programs used with Francince Porter and Staci Wood's data collections to
+% for use in data and statistical processing for Jennifer Rachwani and
+% Victor Santamaria-Gonzalez's experiments.
+%
+% Provisionally, this program will also do any necessary conversions of
+% rotations of linear points referenced to the Global Coordinate System
+% (the transmitter of the magnetic tracking system) to a reference of
+% another Local Coordinate System (the center of the subject's base of
+% support).
+%
+% To Aid in memory and translation, the values of the rows/columns of a
+% unit of "FranEra" bird data are as follows:
+%
+% Forehead -- Marker 1 -- X,Y,Z Pos at 1,2:4 -- Rot. Mat at 1:3,5:7
+% C7 -- Marker 2 -- X,Y,Z Pos at 1,10:12 -- Rot. Mat at 1:3,13:15
+% Left Hand -- Marker 3 -- X,Y,Z Pos at 1,18:20 -- Rot. Mat at 1:3,21:23
+% Right Hand -- Marker 4 -- X,Y,Z Pos at 1,26:28 -- Rot. Mat at 1:3,29:31
+%
+% The Rotational Matrix Format is:
+% RED BOOK (pg79):                          Our Understanding:
+% M(1,1),M(1,2),M(1,3)                      i_x,i_y,i_z
+% M(2,1),M(2,2),M(2,3)                      j_x,j_y,j_z
+% M(3,1),M(3,2),M(3,3)                      k_x,k_y,k_z
+%
+% Per a conversation with Ascen
+%
+% Author: Wayne Manselle
+% Creation Data: May 2012
+%
+% Changelog -- 06/05/2014 -- Adding the rotational matrices of the data as
+% one of the outputs.  Going with a Cell-Array of 3D matrices.
+%
+% INPUTS: birdFile -- the Kinematic file to be converted
+%
+% OUTPUTs: trialData -- Cell Array of Trial Data
+%          rotMData -- Cell Array of Rotational Matrices by Trial
+%          markData -- Data relevant to the marks collected around a 
+%                      subject on the outset of data collection.
+%          rpiMat -- Matrix of RPI data
+%          bosMat -- Base of Support Data
+%          maxHdHt -- The highest point the Head was at, converted to CM and
+%                     filtered.
+%          maxC7Ht -- The highest point C7 was at, converted to CM and filtered.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Begin by reading data through a raw IO channel and closing the channel.
+
+%%
+birdFID = fopen(birdFile);
+birdData=textscan(birdFID, '%s', 'delimiter', '\n');
+fclose(birdFID);
+%This step is to pull the BirdData from its nested cell array.
+birdData = birdData{1};
+%Mark Data, number of Marks, line locations
+markCount = 0;
+markLocs = [];
+
+%First DataLine Over time for verification
+fDataLineOverTime={};
+
+%Trial Data, number of trials, begin and end locations
+trialCount = 0;
+trialBegins = [];
+trialEnds = [];
+
+%A register of any locations in the file where odd line breaks may have
+%occurred.  A recent phenomonon, we're not sure what's going on in the
+%birds to cause this.
+problemLines = [];
+
+%Arrays to Store max head height and max C7 height.
+maxHdCOM_Z = NaN(1,length(birdData));
+maxTK_Z = NaN(1,length(birdData));
+maxHdTk_Z = NaN(1,length(birdData));
+maxC7_Z = NaN(1,length(birdData));
+
+%First Pass, Feel out the data so we can preallocate
+disp('Determining Size and Scope of Kinematic Data.')
+for dataLine=1:length(birdData);
+    curDataLine = birdData(dataLine,:);
+    if(isstr(curDataLine{1}))
+        %Check for MARK
+        if(strfind(curDataLine{1},'MARK'))
+            markCount = markCount + 1;
+            markLocs = [markLocs dataLine];
+            %Check for BEGIN
+        elseif(strfind(curDataLine{1},'BEGIN'))
+            trialCount = trialCount + 1;
+            trialBegins = [trialBegins dataLine];
+            %Check for END
+        elseif(strfind(curDataLine{1},'END'))
+            trialEnds = [trialEnds dataLine];
+        end
+    end
+end
+%Data about raw data assembled, put together export structures.
+
+trialData = cell(trialCount,1);
+rotMData = cell(trialCount,1);
+%MarkData Output, rows: right arm, left arm, traegus, head_top
+%Columns: headxyz,c7xyz,leftxyz,rightxyz,M1_m1,M1_m2,M1_m3
+%M2_m1,M2_m2,M2_m3,M3_m1,M3_m2,M3_m3,M4_m1,M4_m2,M4_m3
+%Rows: Mark 1, Mark 2, Mark 3, Mark 4, Mark 7
+markData = zeros(7,48);
+rpiData = zeros(1,3);
+rpi_TrunkData = zeros(1,3);
+%BOS Data.  Rows: ML_BOS, AP_BOS, Center_BOS
+bosData = zeros(4,9);
+%reset mark and trial counts
+markCount=1;
+trialCount=1;
+
+%Second Pass, Actually Assemble the data
+%%
+disp(['Assembling Kinematic Data for ' birdFile])
+
+
+for dataLine=1:length(birdData);
+% for dataLine=1:16930;
+    %Do some state checks.  If the line is empty, move on.  If the
+    %line contains the text "Mark", move on and note that the next line is
+    %a mark line.  If lines denote a trial beginning, then data lines
+    %should be written out to file until the matching trial end is seen.
+    if(markCount <= length(markLocs) && dataLine == markLocs(markCount))
+        %Increment the line counter to the next line with raw data.
+        dataLine = dataLine+2;
+        %Goal here is to process the mark related lines into a single mark
+        %line for the output file.
+        %[firstDataLine,secondDataLine,thirdDataLine,problems,dataLine] = ...
+        %    franEraDataLineGatherer(birdData,dataLine);
+        %problemLines = horzcat(problemLines,problems);
+        firstDataLine = textscan(cell2mat(birdData(dataLine,:)),'%s','delimiter',',');
+        fDataLineOverTime=horzcat(fDataLineOverTime,{firstDataLine});
+        secondDataLine = textscan(cell2mat(birdData(dataLine+1,:)),'%s','delimiter',',');
+        thirdDataLine = textscan(cell2mat(birdData(dataLine+2,:)),'%s','delimiter',',');
+        %Format Conversions as explained in the trial section.
+        firstDataLine = firstDataLine{1}';
+        secondDataLine = secondDataLine{1}';
+        thirdDataLine = thirdDataLine{1}';
+        %Populate the Mark Matrix for the given Mark Location
+        %Also, dependent on location, set up the various variables
+        %necessary to populate the RPI and BOS matrices
+        %Accumulate the location data for all Markers
+        markData(markCount,1:3) = [str2double(firstDataLine{2}) str2double(firstDataLine{3}) -str2double(firstDataLine{4})];
+        markData(markCount,4:6) = [str2double(firstDataLine{10}) str2double(firstDataLine{11}) -str2double(firstDataLine{12})];
+        markData(markCount,7:9) = [str2double(firstDataLine{18}) str2double(firstDataLine{19}) -str2double(firstDataLine{20})];
+        markData(markCount,10:12) = [str2double(firstDataLine{26}) str2double(firstDataLine{27}) -str2double(firstDataLine{28})];
+        %Accumulate the Rotation Matrix data for the first Marker
+        markData(markCount,13:15) = [str2double(firstDataLine{5}) str2double(firstDataLine{6}) str2double(firstDataLine{7})];
+        markData(markCount,16:18) = [str2double(secondDataLine{5}) str2double(secondDataLine{6}) str2double(secondDataLine{7})];
+        markData(markCount,19:21) = [-str2double(thirdDataLine{5}) -str2double(thirdDataLine{6}) -str2double(thirdDataLine{7})];
+        %Accumulate the Rotation Matrix data for the second Marker
+        markData(markCount,22:24) = [str2double(firstDataLine{13}) str2double(firstDataLine{14}) str2double(firstDataLine{15})];
+        markData(markCount,25:27) = [str2double(secondDataLine{13}) str2double(secondDataLine{14}) str2double(secondDataLine{15})];
+        markData(markCount,28:30) = [-str2double(thirdDataLine{13}) -str2double(thirdDataLine{14}) -str2double(thirdDataLine{15})];
+        %Accumulate the Rotation Matrix data for the third Marker
+        markData(markCount,31:33) = [str2double(firstDataLine{21}) str2double(firstDataLine{22}) str2double(firstDataLine{23})];
+        markData(markCount,34:36) = [str2double(secondDataLine{21}) str2double(secondDataLine{22}) str2double(secondDataLine{23})];
+        markData(markCount,37:39) = [-str2double(thirdDataLine{21}) -str2double(thirdDataLine{22}) -str2double(thirdDataLine{23})];
+        %Accumulate the Rotation Matrix data for the fourth Marker
+        markData(markCount,40:42) = [str2double(firstDataLine{29}) str2double(firstDataLine{30}) str2double(firstDataLine{31})];
+        markData(markCount,43:45) = [str2double(secondDataLine{29}) str2double(secondDataLine{30}) str2double(secondDataLine{31})];
+        markData(markCount,46:48) = [-str2double(thirdDataLine{29}) -str2double(thirdDataLine{30}) -str2double(thirdDataLine{31})];
+        %Processing for specific Mark related operations.
+        if(markCount==3) %The Trageus Mark
+            %Initialize transitatory matrices.
+            tragCenter = zeros(1,3);
+            vHdCenter = zeros(1,3);
+            matHdCenter = zeros(3,3);
+            %Calculate the trageus center by getting the absolute value
+            %of the difference between the trageus locations.
+            %tragCenter(1) = (abs(str2double(firstDataLine{18}) - str2double(firstDataLine{26}))/2)...
+            %    +(min(str2double(firstDataLine{18}),str2double(firstDataLine{26})));
+            %tragCenter(2) = (abs(str2double(firstDataLine{19}) - str2double(firstDataLine{27}))/2)...
+            %    +(min(str2double(firstDataLine{19}),str2double(firstDataLine{27})));
+            %tragCenter(3) = (abs(-str2double(firstDataLine{20}) - -str2double(firstDataLine{28}))/2)...
+            %    +(min(-str2double(firstDataLine{20}),-str2double(firstDataLine{28})));
+            tragCenter(1)=(str2double(firstDataLine{18}) + str2double(firstDataLine{26}))/2;
+            tragCenter(2)=(str2double(firstDataLine{19}) + str2double(firstDataLine{27}))/2;
+            tragCenter(3)=(-str2double(firstDataLine{20}) + -str2double(firstDataLine{28}))/2;
+            %Subtract the head marker's location from the trageus
+            %center's location to get the virtual head center.
+            vHdCenter(1) = tragCenter(1) - str2double(firstDataLine{2});
+            vHdCenter(2) = tragCenter(2) - str2double(firstDataLine{3});
+            vHdCenter(3) = tragCenter(3) - -str2double(firstDataLine{4});
+            %Assemble Matrix of the Head Marker
+            matHdCenter(1,:) = [str2double(firstDataLine{5}) str2double(firstDataLine{6}) str2double(firstDataLine{7})];
+            matHdCenter(2,:) = [str2double(secondDataLine{5}) str2double(secondDataLine{6}) str2double(secondDataLine{7})];
+            matHdCenter(3,:) = [-str2double(thirdDataLine{5}) -str2double(thirdDataLine{6}) -str2double(thirdDataLine{7})];
+
+            %disp('Displaying matHdCenter Inverted')
+            %matHdCenter'
+            
+            %disp('Displaying vHdCenter Inverted')
+            %vHdCenter'
+            
+            %Finally, calculate RPI.  Not exactly sure why Sandy is
+            %inverting the Head Center Matrix just yet.
+            %disp('Displaying Mark 3 RPI Data')
+            rpiData(:) = matHdCenter' * vHdCenter';
+        elseif(markCount==5 || markCount==6) %BOS Calculations
+            %Calculate BOS row selector
+            % 1 -- BOS_ML, 2 -- BOS_AP
+            bosRow = markCount-4;
+            %Get the Component Data
+            bosData(bosRow,1:3) = [str2double(firstDataLine{18}) str2double(firstDataLine{19}) -str2double(firstDataLine{20})];
+            bosData(bosRow,4:6) = [str2double(firstDataLine{26}) str2double(firstDataLine{27}) -str2double(firstDataLine{28})];
+            %Calculate the Center from the components
+            centerXYZ = zeros(1,3);
+            %centerXYZ(1) = (abs(bosData(bosRow,1) - bosData(bosRow,4))/2)+(min(bosData(bosRow,1),bosData(bosRow,4)));
+            %centerXYZ(2) = (abs(bosData(bosRow,2) - bosData(bosRow,5))/2)+(min(bosData(bosRow,2),bosData(bosRow,5)));
+            %centerXYZ(3) = (abs(bosData(bosRow,3) - bosData(bosRow,6))/2)+(min(bosData(bosRow,3),bosData(bosRow,6)));
+            centerXYZ(1) = (bosData(bosRow,1) + bosData(bosRow,4))/2;
+            centerXYZ(2) = (bosData(bosRow,2) + bosData(bosRow,5))/2;
+            centerXYZ(3) = (bosData(bosRow,3) + bosData(bosRow,6))/2;
+            %Get the Calculated Center Data
+            bosData(bosRow,7:9) = centerXYZ(:);
+            if(markCount ==6)
+                %We've reached the end of the RPI marks.  Calculate the
+                %CBOS for use in later calculations.
+                %bosData(3,7) = bosData(1,7);
+                %bosData(3,8) = bosData(2,8);
+                %bosData(3,9) = bosData(1,9);
+                %New Strategy -- Find the midpoint of the midpoints
+                bosData(3,7) = (bosData(1,7) + bosData(2,7))/2;
+                bosData(3,8) = (bosData(1,8) + bosData(2,8))/2;
+                bosData(3,9) = (bosData(1,9) + bosData(2,9))/2;
+            end
+        elseif(markCount==7) %C7 and Sternal Notch Calculations
+            %Prototype of C7_SG Data
+            %This will go into the BOS data matrix, row 4.
+            bosRow = markCount-3;
+            %Get the Component Data. Here we are getting the columns
+            %corresponding to Marker 4 and Marker 2.
+            bosData(bosRow,1:3) = [str2double(firstDataLine{26}) str2double(firstDataLine{27}) -str2double(firstDataLine{28})];
+            bosData(bosRow,4:6) = [str2double(firstDataLine{10}) str2double(firstDataLine{11}) -str2double(firstDataLine{12})];
+            %Calculate the Center from the components
+            centerXYZ = zeros(1,3);
+            centerXYZ(1) = (abs(bosData(bosRow,1) - bosData(bosRow,4))/2)+(min(bosData(bosRow,1),bosData(bosRow,4)));
+            centerXYZ(2) = (abs(bosData(bosRow,2) - bosData(bosRow,5))/2)+(min(bosData(bosRow,2),bosData(bosRow,5)));
+            centerXYZ(3) = (abs(bosData(bosRow,3) - bosData(bosRow,6))/2)+(min(bosData(bosRow,3),bosData(bosRow,6)));
+            %Get the Calculated Center Data
+            bosData(bosRow,7:9) = centerXYZ(:);
+            %Subtract the C7 marker's location from the midpoint between C7
+            %and sternal notch to get the vector.
+            vTrunk(1) = centerXYZ(1) - str2double(firstDataLine{10});
+            vTrunk(2) = centerXYZ(2) - str2double(firstDataLine{11});
+            vTrunk(3) = centerXYZ(3) - -str2double(firstDataLine{12});
+            %Assemble Rotational Matrix of the C7 Maker
+            matC7(1,:) = [str2double(firstDataLine{13}) str2double(firstDataLine{14}) str2double(firstDataLine{15})];
+            matC7(2,:) = [str2double(secondDataLine{13}) str2double(secondDataLine{14}) str2double(secondDataLine{15})];
+            matC7(3,:) = [-str2double(thirdDataLine{13}) -str2double(thirdDataLine{14}) -str2double(thirdDataLine{15})];
+
+            %Finally, calculate RPI_TrunkData.  Not exactly sure why Sandy is
+            %inverting the Head Center Matrix just yet.
+            %disp('Displaying Mark 3 RPI Data')
+            rpi_TrunkData(:) = matC7' * vTrunk';
+        end
+        %Move the counter up three places to match where we now are in the
+        %file.
+        dataLine=dataLine+4;
+        markCount=markCount+1;
+        %Check for BEGIN
+    elseif(trialCount <= length(trialBegins) && dataLine == trialBegins(trialCount))
+        %Increment to the next line with data.
+        dataLine = dataLine+2;
+        %Create Matrix to hold this trial's data.
+        %Matrix Columns are indexed as follows:
+        %1 - TrialNum; 2-4 - HeadPos; 5-7 - HeadCOMPos; 8-10 - C7POS;
+        %11-13 - TkCOMPOS; 14-16 - LHandPOS; 17-19 - RHandPOS; 20 - Notes
+        trialMatrix = zeros(floor((trialEnds(trialCount)-trialBegins(trialCount))/4)-1,20);
+        trialRotMatrix = cell(floor((trialEnds(trialCount)-trialBegins(trialCount))/4)-1,4);
+        %Internal counter of line numbers for trial
+        lCounter = 1;
+        while(dataLine+6 < trialEnds(trialCount))
+            %Gather Data
+            %Check to see if we're looking at a double blank line problem
+            %case.
+            %firstDataLine = textscan(cell2mat(birdData(dataLine,:)),'%s','delimiter',',');
+            %secondDataLine = textscan(cell2mat(birdData(dataLine+1,:)),'%s','delimiter',',');
+            %thirdDataLine = textscan(cell2mat(birdData(dataLine+2,:)),'%s','delimiter',',');
+            [firstDataLine,secondDataLine,thirdDataLine,dataLine] = ...
+                franEraDataLineGatherer(birdData,dataLine);
+            %Convert into a usable storage format
+            %Due to needing to support the new textscan method (sorry,
+            %strread is marked for deprecation), we have to manipulate the
+            %output slightly in order to get it into a format that our old
+            %logic deals with nicely.
+            firstDataLine = firstDataLine{1}';
+            secondDataLine = secondDataLine{1}';
+            thirdDataLine = thirdDataLine{1}';
+            %We need to assume that RPI data has already been calculated.
+            %If not, then we should likely throw an error.
+            %For all output data, we subtract CBOS of the subject to
+            %reference the positions collected to the subject's base of
+            %support.
+            %Trial Number
+            trialMatrix(lCounter,1) = trialCount;
+            %Hd_Trk
+            hd_Trk = [str2double(firstDataLine{2}) str2double(firstDataLine{3}) -str2double(firstDataLine{4})];
+            trialMatrix(lCounter,2:4) = hd_Trk-bosData(3,7:9);
+            %The rotation matrix of the first sensor, transposed to be
+            %within expectations of typical usage.
+            trialRotMatrix{lCounter,1} = ...
+                [str2double(firstDataLine{5}),str2double(firstDataLine{6}),str2double(firstDataLine{7});...
+                str2double(secondDataLine{5}),str2double(secondDataLine{6}),str2double(secondDataLine{7});...
+                str2double(thirdDataLine{5}),str2double(thirdDataLine{6}),str2double(thirdDataLine{7})]';
+            maxHdTk_Z(dataLine) = trialMatrix(lCounter,4);
+            %Hd_COM
+            %Create the head COM storage matrix
+            matrixHeadCenter = zeros(3,3);
+            matrixHeadCenter(1,:) = [str2double(firstDataLine{5}) str2double(firstDataLine{6}) str2double(firstDataLine{7})];
+            matrixHeadCenter(2,:) = [str2double(secondDataLine{5}) str2double(secondDataLine{6}) str2double(secondDataLine{7})];
+            matrixHeadCenter(3,:) = [str2double(thirdDataLine{5}) str2double(thirdDataLine{6}) str2double(thirdDataLine{7})];
+            %Use the equation -- mhc*rpi' + head_trk'
+            %To calculate the head's center of mass for this trial.
+            
+            %Reinvert RPI
+            hdCOM = (matrixHeadCenter * rpiData' + hd_Trk')' - bosData(3,7:9);
+            trialMatrix(lCounter,5:7) = hdCOM;
+            maxHdCOM_Z(dataLine) = hdCOM(3);
+            %C7 
+            c7 = [str2double(firstDataLine{10}) str2double(firstDataLine{11}) -str2double(firstDataLine{12})];
+            trialMatrix(lCounter,8:10) = c7-bosData(3,7:9);
+            %The rotation matrix of the second sensor, transposed to be
+            %within expectations of typical usage.
+            trialRotMatrix{lCounter,2} = ...
+                [str2double(firstDataLine{13}),str2double(firstDataLine{14}),str2double(firstDataLine{15});...
+                str2double(secondDataLine{13}),str2double(secondDataLine{14}),str2double(secondDataLine{15});...
+                str2double(thirdDataLine{13}),str2double(thirdDataLine{14}),str2double(thirdDataLine{15})]';
+            maxC7_Z(dataLine) = trialMatrix(lCounter,10);
+            %Trunk_COM
+            %Create the trunk COM storage matrix
+            matrixTrunkCenter = zeros(3,3);
+            matrixTrunkCenter(1,:) = [str2double(firstDataLine{13}) str2double(firstDataLine{14}) str2double(firstDataLine{15})];
+            matrixTrunkCenter(2,:) = [str2double(secondDataLine{13}) str2double(secondDataLine{14}) str2double(secondDataLine{15})];
+            matrixTrunkCenter(3,:) = [str2double(thirdDataLine{13}) str2double(thirdDataLine{14}) str2double(thirdDataLine{15})];
+            %Use the equation -- mtc*rpi_TrunkData' + C7_trk'
+            %To calculate the trunk's center of mass for this trial.
+            TrunkCOM = (matrixTrunkCenter * rpi_TrunkData' + c7')' - bosData(3,7:9);
+            trialMatrix(lCounter,11:13) = TrunkCOM;
+            maxTK_Z(dataLine) = TrunkCOM(3);
+            %Left Arm
+            leftArm = [str2double(firstDataLine{18}) str2double(firstDataLine{19}) -str2double(firstDataLine{20})];
+            trialMatrix(lCounter,14:16) = leftArm-bosData(3,7:9);
+            %The rotation matrix of the third sensor, transposed to be
+            %within expectations of typical usage.
+            trialRotMatrix{lCounter,3} = ...
+                [str2double(firstDataLine{21}),str2double(firstDataLine{22}),str2double(firstDataLine{23});...
+                str2double(secondDataLine{21}),str2double(secondDataLine{22}),str2double(secondDataLine{23});...
+                str2double(thirdDataLine{21}),str2double(thirdDataLine{22}),str2double(thirdDataLine{23})]';
+            %Right Arm
+            rightArm = [str2double(firstDataLine{26}) str2double(firstDataLine{27}) -str2double(firstDataLine{28})];
+            trialMatrix(lCounter,17:19) = rightArm-bosData(3,7:9);
+            %The rotation matrix of the fourth sensor, transposed to be
+            %within expectations of typical usage.
+            trialRotMatrix{lCounter,4} = ...
+                [str2double(firstDataLine{29}),str2double(firstDataLine{30}),str2double(firstDataLine{31});...
+                str2double(secondDataLine{29}),str2double(secondDataLine{30}),str2double(secondDataLine{31});...
+                str2double(thirdDataLine{29}),str2double(thirdDataLine{30}),str2double(thirdDataLine{31})]';
+            %Mark
+            %Code to evaluate any additional marks here? -- Currently
+            %assume we don't mark during trials
+            trialMatrix(lCounter,20) = 0;
+            %Increment Counter to skip blank line.
+            %dataLine=dataLine+4;
+            dataLine=dataLine+1;
+            lCounter = lCounter+1;
+        end
+        %Store the trial related data in their related variables
+        trialData(trialCount)={trialMatrix};
+        rotMData{trialCount}=trialRotMatrix;
+        trialCount=trialCount+1;
+    end
+end
+
+%%
+
+%Clear the giant bird data matrix to free up some memory
+clearvars birdData
+
+disp('Calculating Maximum HeadCOM and C7 Heights')
+
+%A little left over heavy lifting to determine max head and C7 heights.
+%Step 1 -- Strip out any remaining NaNs from the arrays.
+maxHdCOM_Z(isnan(maxHdCOM_Z))=[];
+maxTK_Z(isnan(maxTK_Z))=[];
+maxHdTk_Z(isnan(maxHdTk_Z))=[];
+maxC7_Z(isnan(maxC7_Z))=[];
+%Step 2 -- Convert, filter.
+maxHdCOM_Z = maxHdCOM_Z.*2.54;
+maxTK_Z = maxTK_Z.*2.54;
+maxHdTk_Z=maxHdTk_Z.*2.54;
+maxC7_Z=maxC7_Z.*2.54;
+
+%Begin Filtering.
+nyquist=84/2;
+[b,a]=butter(4,(6/nyquist));%this is a 4th order butterworth filter with 12 Hz cutoff
+%hdCOM
+headHdCOM_ZF = filtfilt(b,a,maxHdCOM_Z);
+%Velocities of Filtered position.  Used to grab any really weird head
+%movements.  Usually due to infant tossing off head tracking marker.
+%headHdCOM_ZFVel = diff(headHdCOM_ZF)./0119;
+%C7
+tk_ZF = filtfilt(b,a,maxTK_Z);
+
+%Step 3 -- Averages, Standard Deviations, filter out suspect points and
+%find the maxes.
+for set=1:2
+    %Placeholder variables.
+    testValPos = 0;
+    testValNeg = 0;
+    candData=[];
+    switch set
+        case 1
+            %Viability bounds for Head COM Position Case
+            testValPos = mean(headHdCOM_ZF)+2*std(headHdCOM_ZF);
+            testValNeg = mean(headHdCOM_ZF)-2*std(headHdCOM_ZF);
+            candData = headHdCOM_ZF;
+        case 2
+            %Viability bounds for C7 Position Case
+            testValPos = mean(tk_ZF)+3*std(tk_ZF);
+            testValNeg = mean(tk_ZF)-3*std(tk_ZF);
+            candData = tk_ZF;
+        otherwise
+            disp('An error has occurred in processing the max head or C7 height.')
+    end
+    %Remove any max point candidates that are outside of our bounds.
+    for dPt=1:length(candData)
+        if(candData(dPt)>testValPos || candData(dPt)<testValNeg)
+            candData(dPt)=NaN;
+        end
+    end
+    %Strip any non-qualifying points from
+    candData(isnan(candData))=[];
+    %Set the proper max value depending on which set we're processing.
+    if(set==1)
+        maxHdHt = max(abs(candData));
+    else
+        maxC7Ht = max(abs(candData));
+    end
+end
+%Warn the User about any problem lines.
+%problemLines
+%End Function.
+end

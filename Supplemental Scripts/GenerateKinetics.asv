@@ -1,0 +1,391 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%GENERATEKINETICS.M
+%
+%This script uses the
+%
+%The script is currently specifically devoted to getting the kinetics of
+%the trunk and head segments of the selected subjects.
+%
+%The script also requires access to the trial by trial kinematic files for
+%each subject as they're processed.
+%
+%This script uses the segment derivation table as defined by <> to
+%determine the various blah-de-blahs
+%
+%Finally, using inverse dynamics, the script generates the torques around
+%the centers of rotation for each subject.
+%
+%Author -- Wayne Manselle
+%Date -- December 2014
+%CHANGELOG -- 12.16.2014 -- Initial Creation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Step 0 -- Set up paths and variables
+%Might need to fix this up, it assumes it is being called from the top
+%level directory.  Not so smart Wayno.
+%setupPath();
+
+%Redoing the segment tables to use Marcos Duarte's Body Segment Parameters
+%found via the demotu github account.  Here, we'll be using Duarte's
+%Head2 segment to describe the Head and Cervical component, the Upper trunk
+%segment to describe the MidRib Support trunk segment, and the Trunk 2
+%segment to describe the trunk as supported at pelvic level.
+%
+%Rows:                          Columns:
+%1 -- Head 2                    1 -- Seg. Mass / Total Mass
+%2 -- Upper Trunk 2             2 -- CoM / Segment Length
+%3 -- Trunk 2                   3 -- Rad. Gyr. in Sagital Plane
+%                               4 -- Rad. Gyr. in Trans. Plane
+%                               5 -- Rad. Gyr in Long. Plane
+
+segTable = cell(1,2);
+%Table 1 -- Females
+segTable{1} = [[0.0668,0.4841,0.271,0.295,0.261];...
+               [0.1545,0.5050,0.466,0.314,0.449];...
+               [0.4257,0.4964,0.307,0.292,0.147]];
+
+%Table 2 -- Males
+segTable{2} = [[0.0694,0.5002,0.303,0.315,0.261];...
+               [0.1596,0.5066,0.505,0.320,0.465];...
+               [0.4346,0.5138,0.328,0.306,0.169]];
+
+
+%Seed the Output Storage line with the headers
+statOutput = {'SubjectID','SubjectSex','SupportLevel','Trial'...
+    'WholeBodyMass','HeadSegMass','HeadSegLength',...
+    'HeadMInertiaXZ','HeadMIntertiaYZ',...
+    'HeadFPXMin','HeadFPXMean','HeadFPXMax',...
+    'HeadFPZMin','HeadFPZMean','HeadFPZMax',...
+    'HeadFPYMin','HeadFPYMean','HeadFPYMax',...
+    'HeadFPZMin','HeadFPZMean','HeadFPZMax',...
+    'HeadTPXMin','HeadTPXMean','HeadTPXMax',...
+    'HeadTPZMin','HeadTPZMean','HeadTPZMax',...
+    'HeadTPYMin','HeadTPYMean','HeadTPYMax',...
+    'HeadTPZMin','HeadTPZMean','HeadTPZMax',...
+    'TrunkMass','TrunkSegLength',...
+    'TrunkMInertiaXZ','TrunkMIntertiaYZ',...
+    'TrunkFDXMin','TrunkFDXMean','TrunkFDXMax',...
+    'TrunkFDZMin','TrunkFDZMean','TrunkFDZMax',...
+    'TrunkFDYMin','TrunkFDYMean','TrunkFDYMax',...
+    'TrunkFDZMin','TrunkFDZMean','TrunkFDZMax',...
+    'TrunkFPXMin','TrunkFPXMean','TrunkFPXMax',...
+    'TrunkFPZMin','TrunkFPZMean','TrunkFPZMax',...
+    'TrunkFPYMin','TrunkFPYMean','TrunkFPYMax',...
+    'TrunkFPZMin','TrunkFPZMean','TrunkFPZMax',...
+    'TrunkTDXMin','TrunkTDXMean','TrunkTDXMax',...
+    'TrunkTDZMin','TrunkTDZMean','TrunkTDZMax',...
+    'TrunkTDYMin','TrunkTDYMean','TrunkTDYMax',...
+    'TrunkTDZMean','TrunkTDZMax','TrunkTDZMin',...
+    'TrunkTPXMin','TrunkTPXMean','TrunkTPXMax',...
+    'TrunkTPZMin','TrunkTPZMean','TrunkTPZMax',...
+    'TrunkTPYMin','TrunkTPYMean','TrunkTPYMax',...
+    'TrunkTPZMean','TrunkTPZMax','TrunkTPZMin'};
+
+%Output headers for by reach 
+
+fullFileHeader = {'HdCOMPosX','HdCOMPosY','HdCOMPosZ',...
+    'HdCOMRLenX','HdCOMRLenY','HdCOMRLenZ',...
+    'HdCOMLinAccX','HdCOMLinAccY','HdCOMLinAccZ',...
+    'HdCOMAngAccX','HdCOMAngAccY','HdCOMAngAccZ',...
+    'HdCOMFPX','HDCOMFPZ','HDCOMFPY','HDCOMFPZ',...
+    'HDCOMTPX','HDCOMTPZ','HDCOMTPY','HDCOMTPZ',...
+    'TkCOMPosX','TkCOMPosY','TkCOMPosZ',...
+    'TkCOMRLenX','TkCOMRLenY','TkCOMRLenZ',...
+    'TkCOMLinAccX','TkCOMLinAccY','TkCOMLinAccZ',...
+    'TkCOMAngAccX','TkCOMAngAccY','TkCOMAngAccZ',...
+    'TkCOMFDX','TkCOMFDZ','TkCOMFDY','TkCOMFDZ',...
+    'TkCOMFPX','TkCOMFPZ','TkCOMFPY','TkCOMFPZ',...
+    'TkCOMTDX','TkCOMTDZ','TkCOMTDY','TkCOMTDZ',...
+    'TkCOMTPX','TkCOMTPZ','TkCOMTPY','TkCOMTPZ'};
+
+%Select all folders of subject data to process kinematic stats for --
+%returns 0 on a cancelled selection
+foldersToProcess = uipickfiles();
+
+%Step 9 -- Save out final database
+outPath = uigetdir('c:\','Select where to save Output.');
+
+%Step 1 -- Begin iterating over all selected subjects
+
+%Process those subjects
+if(iscell(foldersToProcess))
+    
+    for procFolder=1:size(foldersToProcess,2)
+        %This stage is mostly to get a handle on subject data locations,
+        %etc.  We can probably just roll in generating segment lengths if
+        %need be.
+        [fileList, levelText, topDir, curSubj] = CollectKinematicFiles(foldersToProcess{procFolder});
+        
+        %Check to see if this is older adult formatted data, or if it is
+        %current TD-Study formatted data.
+        if(exist([topDir '\Output\ReachData\'],'dir'))
+            %Older Format
+            oldFormat = 1;
+        else
+            %Newer Format
+            oldFormat = 0;
+        end
+            
+        %Step 2 -- Ask for Subject's Weight
+        curSubjSex = 0;
+        while(~(strcmp(curSubjSex,'M') || strcmp(curSubjSex,'F')))
+            answers = ...
+                inputdlg({'Please enter the Subject weight in kg','Please enter the Subject sex, using M or F'},...
+                'Define Subject Weight and Sex',1,{'50','F'});
+            curSubjMass = str2double(answers(1));
+            curSubjSex = upper(answers(2));
+        end
+        
+        curSegTable = 0;
+        if(strcmp(curSubjSex,'F'))
+            curSegTable = segTable{1};
+        else
+            curSegTable = segTable{2};
+        end
+        
+        %Step 3 -- Iterate over all levels available for subject
+        for level=1:size(levelText,2)           
+            
+            strLev = levelText{level};
+            strLev = strLev(2:end-1);
+            
+            %Step 4 -- Check to see if Mark file exists for level
+            %Do Oklahoma logic
+            [kinTrialData, rotTrialData, markData, rpiData, bosData,...
+                maxHdHt, maxTkHt, rpi_TrunkData, fDataLineOverTime] = ...
+                procOklahomaFile(fileList{level,3});
+            
+            %Seperate out the Center of the Base of Support for
+            %calculations down the line.
+            CBOS = bosData(3,7:9);
+            
+            %Step 5 -- Grab the Reaching Files for this Subject and Level
+            %I am assuming these are 2014 era adult files, which have
+            %EMGKin files that are our closest temporal match to the actual
+            %reach.
+            
+            %Begin by testing the directory structure to see if we're
+            %dealing with 2014 Era Adult study styled files, 
+            %   /subj/output/reachdata/level/emgkin 
+            %or TD-Infant/CP study styled files.
+            %   /subj/output/kinematics/pelvic/reachtrials/reachtype
+            if(oldFormat)
+                emgKinDir = [topDir '\Output\ReachData\' levelText{level} '\EMGKin\'];
+                reachFiles = dir([emgKinDir '*.csv']);
+            else
+                rReachDir = [topDir 'Output\Kinematics\Pelvic\ReachTrials\Right_Reach\' ];
+                lReachDir = [topDir 'Output\Kinematics\Pelvic\ReachTrials\Left_Reach\'];
+                rReachFiles = dir([rReachDir '*.csv']);
+                lReachFiles = dir([lReachDir '*.csv']);
+                reachFiles = {};
+                %A bit ugly, but this'll get the resultant to play nicely
+                %with the reach file code below.
+                for lf=1:size(lReachFiles,1)
+                    reachFiles = horzcat(reachFiles, {[lReachDir lReachFiles(lf).name]});
+                end
+                for rf=1:size(rReachFiles,1)
+                    reachFiles = horzcat(reachFiles, {[rReachDir rReachFiles(rf).name]});
+                end                
+            end
+                        
+            %Step 6 -- Convert the mark data's units from inches to meters.
+            markData(:,1:12) = markData(:,1:12).*(2.54/100);
+                      
+            %Step 7 -- Compare Relevant Mark Data to generate the vector lengths
+            %Head -- Euclidian Distance of the Vertex to C7
+            headSegLength = sqrt((markData(4,7)-markData(4,4))^2 + (markData(4,8)-markData(4,5))^2 + (markData(4,9)-markData(4,6))^2);
+
+            %Mobile Trunk -- This depends on level of support
+            
+            %Pelvic Support -- C7 to ~Mid-Hip, going to use tail marker
+            %from Mark 4.
+            if(level==1)
+                mobTkSegLength = sqrt((markData(4,4)-markData(4,10))^2 + (markData(4,5)-markData(4,11))^2 + (markData(4,6)-markData(4,12))^2);
+            else
+            %Thoracic Support -- C7 to the rear portion of the base of 
+            %support marker from Mark 6
+                mobTkSegLength = sqrt((markData(6,4)-markData(6,7))^2 + (markData(6,5)-markData(6,8))^2 + (markData(6,6)-markData(6,9))^2);
+            end
+            
+            %A note here.  When grabbing information from the Dempster
+            %table, you'll notice the level+2 calls.  This is affecting
+            %which trunk sub-segment we're working with dependant on which
+            %level of support we're looking at.  Level 1 --> Thorax +
+            %Abdomen, Level 2 --> Thorax
+            
+            %Step 8 -- Calculate Segment Masses
+            headMass = curSegTable(1,1) * curSubjMass;
+            mobTkMass = curSegTable(level+1,1) * curSubjMass;
+            
+            %Step 9 -- Calculate COM Location
+            headCOM = curSegTable(1,2) .* headSegLength;
+            mobTkCOM = curSegTable(level+1,2) .* mobTkSegLength;
+            
+            %Step 10 -- Calculate Radii of Gyration 
+            headROG = curSegTable(1,3:5) .* headSegLength;
+            mobTkROG = curSegTable(level+1,3:5) .* mobTkSegLength;
+            
+            %Step 11 -- Calculate Segment Moments of Inertia
+            %XZ Plane is considered the Transverse Plane by Duarte
+            %YZ Plane is considered the Sagital Plane by Duarte
+            hd_I_XZ = headMass * curSegTable(1,4);
+            hd_I_YZ = headMass * curSegTable(1,3);
+            tk_I_XZ = mobTkMass * curSegTable(level+1,4);
+            tk_I_YZ = mobTkMass * curSegTable(level+1,3);
+            
+            %Step 10 -- Start assembling variables
+            %Variables needing to be calculated
+            %Linear Acceleration
+            %Angular Acceleration
+            
+            %Storage variable for getting average of averages
+            curLevData = [];
+            for trial=1:size(reachFiles,1)
+                %Next get at the reaching portion of the trial.
+                if(oldFormat)
+                    curTrialData = readtext2([emgKinDir reachFiles(trial).name],',','','');
+                    %Subselect the Center of Mass Position for the head and
+                    %trunk COMs.
+                %Also, the current trial data is in CM, and we need it in
+                %M, so divide everything by 100.
+                hdCOMPos = cell2mat(curTrialData(2:end,5:7))./100;
+                tkCOMPos = cell2mat(curTrialData(2:end,11:13))./100;
+                
+                %Calculate r lengths (using the Center of Rotation) for the
+                %Head and Trunk.  For the Head it'll be the center of mass 
+                %of the Trunk.  For the trunk it'll be the Center of the 
+                %Base of Support.               
+                hdCOMRLenX = hdCOMPos(:,1) - tkCOMPos(:,1);
+                hdCOMRLenY = hdCOMPos(:,1) - tkCOMPos(:,1);
+                hdCOMRLenZ = hdCOMPos(:,1) - tkCOMPos(:,1);
+                
+                %The use of repmat here is to allow a clean subtraction of
+                %the CBOS from every row of the tkCOMPos.                
+                tkCOMRLenX = tkCOMPos(:,1) - CBOS(1);
+                tkCOMRLenY = tkCOMPos(:,2) - CBOS(2);
+                tkCOMRLenZ = tkCOMPos(:,3) - CBOS(3);
+                
+                %Get Linear Acceleration Vectors for the Centers of Mass.
+                hdCOMLinAccX = diff(diff(hdCOMPos(:,1))./0.119)./0.119;
+                hdCOMLinAccY = diff(diff(hdCOMPos(:,2))./0.119)./0.119;
+                hdCOMLinAccZ = diff(diff(hdCOMPos(:,3))./0.119)./0.119;
+                
+                tkCOMLinAccX = diff(diff(tkCOMPos(:,1))./0.119)./0.119;
+                tkCOMLinAccY = diff(diff(tkCOMPos(:,2))./0.119)./0.119;
+                tkCOMLinAccZ = diff(diff(tkCOMPos(:,3))./0.119)./0.119;
+                
+                %Calculate the Angular Acceleration Vectors based on radius
+                %of rotation and linear acceleration above
+                hdCOMAngAccX = hdCOMLinAccX ./ hdCOMRLenX(3:end);
+                hdCOMAngAccY = hdCOMLinAccY ./ hdCOMRLenY(3:end);
+                hdCOMAngAccZ = hdCOMLinAccZ ./ hdCOMRLenZ(3:end);
+                
+                tkCOMAngAccX = tkCOMLinAccX ./ tkCOMRLenX(3:end);
+                tkCOMAngAccY = tkCOMLinAccY ./ tkCOMRLenY(3:end);
+                tkCOMAngAccZ = tkCOMLinAccZ ./ tkCOMRLenZ(3:end);
+                               
+                %Now we need to start calculating moments and forces
+                %The general form of the equations we need to solve are as
+                %follows:
+                %
+                %%Forces via Newton's First Law
+                %Fd -- Force in the Distal 
+                %Fp -- Force in the Proximal 
+                %g -- Force due to Gravity
+                %[Fdx Fdz] + [m*gx m*gz] + [Fpx Fpz] = m*[ax az]
+                %[Fdy Fdz] + [m*gy m*gz] + [Fpy Fpz] = m*[ay az]
+                %                        
+                %Notes for the above equations:
+                %* The distal forces for the head will always be 0.
+                %* The force due to gravity in the x and y plane will
+                %  always be 0.
+                %* The distal forces for the Trunk segment will be equal to
+                %  -1 * the same plane's proximal forces from the head
+                %  segment.
+                %
+                
+                expSize = size(hdCOMLinAccX,1);
+                
+                hdFP_XZ = [(curSubjMass .* hdCOMLinAccX)';(curSubjMass .* hdCOMLinAccZ)']-repmat([0;curSubjMass*9.8],1,expSize);
+                
+                hdFP_YZ = [(curSubjMass .* hdCOMLinAccY)';(curSubjMass .* hdCOMLinAccZ)']-repmat([0;curSubjMass*9.8],1,expSize);
+                
+                tkFD_XZ = -1 * hdFP_XZ;
+                
+                tkFD_YZ = -1 * hdFP_YZ;
+                
+                tkFP_XZ = [(curSubjMass .* tkCOMLinAccX)';(curSubjMass .* tkCOMLinAccZ)']-repmat([0;curSubjMass*9.8],1,expSize)-tkFD_XZ;
+                
+                tkFP_YZ = [(curSubjMass .* tkCOMLinAccY)';(curSubjMass .* tkCOMLinAccZ)']-repmat([0;curSubjMass*9.8],1,expSize)-tkFD_YZ;
+                
+                %%Relating Moment, Level Arm and Forms to Inertia
+                %Td -- Torque in the distal 
+                %Tp -- Torque in the proximal
+                %I -- Moment of Inertia
+                %[Tdx Tdz] + [Rdx Rdz] o [Fdx Fdz] + [Tpx Tpz] + [Rpx Rpz] o [Fpx Fpz] = I * alpha
+                %[Tdy Tdz] + [Rdy Rdz] o [Fdy Fdz] + [Tpy Tpz] + [Rpy Rpz] o [Fpy Fpz] = I * alpha
+                %
+                %Notes for the above equations:
+                %* The distal torques and forces in the head will always be
+                %  0.
+                %* The force due to gravity in the x and y plane will
+                %  always be 0.
+                %* The distal forces for the Trunk seqment will be equal to
+                %  -1 * the same plane's proximal forces from the head
+                %  segment.
+                
+                hdTP_XZ = hd_I_XZ .* [hdCOMAngAccX';hdCOMAngAccZ'] - repmat(dot([hdCOMRLenX(3:end)'; hdCOMRLenZ(3:end)'],hdFP_XZ),2,1);
+                hdTP_YZ = hd_I_YZ .* [hdCOMAngAccY';hdCOMAngAccZ'] - repmat(dot([hdCOMRLenY(3:end)'; hdCOMRLenZ(3:end)'],hdFP_XZ),2,1);
+                               
+                tkTD_XZ = -1 * hdTP_XZ;
+                tkTD_YZ = -1 * hdTP_YZ;
+                
+                tkTP_XZ = tk_I_XZ .* [tkCOMAngAccX';tkCOMAngAccZ'] - repmat(dot([tkCOMRLenX(3:end)'; tkCOMRLenZ(3:end)'],tkFP_XZ),2,1)-tkTD_XZ;
+                tkTP_YZ = tk_I_YZ .* [tkCOMAngAccY';tkCOMAngAccZ'] - repmat(dot([tkCOMRLenY(3:end)'; tkCOMRLenZ(3:end)'],tkFP_XZ),2,1)-tkTD_XZ;
+                
+                %Accumulate Total Dataset outputs for this reach.
+                fullReachData=vertcat(fullFileHeader,...
+                    num2cell(horzcat(hdCOMPos(3:end,:),hdCOMLinAccX,hdCOMLinAccY,hdCOMLinAccZ,...
+                    hdCOMRLenX(3:end),hdCOMRLenY(3:end),hdCOMRLenZ(3:end),...
+                    hdCOMAngAccX,hdCOMAngAccY,hdCOMAngAccZ,...
+                    tkCOMPos(3:end,:),...
+                    tkCOMLinAccX,tkCOMLinAccY,tkCOMLinAccZ,...
+                    tkCOMRLenX(3:end),tkCOMRLenY(3:end),tkCOMRLenZ(3:end),...
+                    tkCOMAngAccX,tkCOMAngAccY,tkCOMAngAccZ,...
+                    hdFP_XZ',hdFP_YZ',tkFD_XZ',tkFD_YZ',tkFP_XZ',tkFP_YZ',...
+                    hdTP_XZ',hdTP_YZ',tkTD_XZ',tkTD_YZ',tkTP_XZ',tkTP_YZ'))); 
+                
+                cell2csv([outPath '\' curSubj '_' strLev '_' num2str(trial) '_data.csv'],fullReachData);
+                
+                %Put together statistics for the reach from the forces and
+                %torques.
+                
+                %Build Stats Output Line for this reach
+                curReachData = horzcat(curSubjMass,headMass,headSegLength,hd_I_XZ, hd_I_YZ,...
+                    min(hdFP_XZ,[],2)',mean(hdFP_XZ,2)',max(hdFP_XZ,[],2)',...
+                    min(hdFP_YZ,[],2)',mean(hdFP_YZ,2)',max(hdFP_YZ,[],2)',...
+                    min(hdTP_XZ,[],2)',mean(hdTP_XZ,2)',max(hdTP_XZ,[],2)',...
+                    min(hdTP_YZ,[],2)',mean(hdTP_YZ,2)',max(hdTP_YZ,[],2)',...
+                    mobTkMass,mobTkSegLength, tk_I_XZ, tk_I_YZ,...
+                    min(tkFD_XZ,[],2)',mean(tkFD_XZ,2)',max(tkFD_XZ,[],2)',...
+                    min(tkFD_XZ,[],2)',mean(tkFD_XZ,2)',max(tkFD_XZ,[],2)',...
+                    min(tkFP_XZ,[],2)',mean(tkFP_XZ,2)',max(tkFP_XZ,[],2)',...
+                    min(tkFP_XZ,[],2)',mean(tkFP_XZ,2)',max(tkFP_XZ,[],2)',...
+                    min(tkTD_XZ,[],2)',mean(tkTD_XZ,2)',max(tkTD_XZ,[],2)',...
+                    min(tkTD_XZ,[],2)',mean(tkTD_XZ,2)',max(tkTD_XZ,[],2)',...
+                    min(tkTP_XZ,[],2)',mean(tkTP_XZ,2)',max(tkTP_XZ,[],2)',...
+                    min(tkTP_XZ,[],2)',mean(tkTP_XZ,2)',max(tkTP_XZ,[],2)');
+                
+                statOutput = vertcat(statOutput,...
+                    horzcat(curSubj,curSubjSex,levelText{level},num2str(trial),...
+                    num2cell(curReachData)));
+                
+                curLevData = vertcat(curLevData,curReachData);
+            end
+           statOutput = vertcat(statOutput,...
+               horzcat(curSubj,curSubjSex,strLev,'Avg',...
+               num2cell(mean(curLevData))));
+        end
+    end
+end
+cell2csv([outPath '\KineticStats.csv'],statOutput);
